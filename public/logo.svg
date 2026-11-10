@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="blueCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D4FF" />
+      <stop offset="100%" stop-color="#008CFF" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- Cybernetic Hexagon Background -->
+  <polygon points="50,5 90,26 90,74 50,95 10,74 10,26" stroke="#008CFF" stroke-width="2.5" fill="#080F1C" stroke-opacity="0.8"/>
+  <polygon points="50,12 83,30 83,70 50,88 17,70 17,30" stroke="#00D4FF" stroke-width="1" stroke-dasharray="3,3" fill="none" opacity="0.4"/>
+  <!-- Stylized Laptop Screen -->
+  <rect x="26" y="27" width="48" height="32" rx="4" stroke="url(#blueCyan)" stroke-width="3" fill="#050505" filter="url(#glow)"/>
+  <!-- Screen Inner Display lines -->
+  <path d="M33 43L45 35L55 45L67 37" stroke="#00D4FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Laptop Keyboard Base -->
+  <path d="M19 63L23 69H77L81 63H19Z" fill="url(#blueCyan)"/>
+  <rect x="42" y="65" width="16" height="2" rx="1" fill="#FFFFFF" opacity="0.9"/>
+  <!-- Dynamic Speed Slash / Top Accent -->
+  <path d="M48 18L62 18L52 27L48 18Z" fill="#00D4FF"/>
+</svg>
