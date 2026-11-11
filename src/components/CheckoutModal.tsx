@@ -449,13 +449,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5 text-slate-400" />
-              <span>{t('notes')}</span>
+              <span>{language === 'ar' ? 'ملاحظات إضافية (اختياري)' : 'Notes supplémentaires (optionnel)'}</span>
             </label>
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder={t('notesPlaceholder')}
+              placeholder={
+                language === 'ar'
+                  ? 'مثال: يرجى الاتصال بي قبل التوصيل...'
+                  : 'ex: Appelez-moi avant la livraison...'
+              }
               className="w-full bg-[#050A14] text-white text-xs sm:text-sm rounded-xl px-3.5 py-2 border border-blue-900/60 focus:border-cyan-400 focus:outline-none"
             />
           </div>
