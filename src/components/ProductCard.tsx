@@ -3,6 +3,7 @@ import { Product } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
+import { useStore } from '../context/StoreContext';
 import { 
   Cpu, 
   HardDrive, 
@@ -15,18 +16,21 @@ import {
   MessageCircle,
   Key,
   Briefcase,
-  Zap
+  Zap,
+  Truck
 } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
   onSelect: (product: Product) => void;
+  onOrderNow?: (product: Product) => void;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect, onOrderNow }) => {
   const { t, language } = useLanguage();
   const { addToCart, items } = useCart();
   const { activeTheme } = useTheme();
+  const { settings } = useStore();
 
   const isItemInCart = items.some(item => item.product.id === product.id);
 
@@ -36,7 +40,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
 
   const handleQuickWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const phone = '213555123456';
+    const phone = (settings.whatsappNumber || '213555123456').replace(/[^0-9]/g, '');
     const message = language === 'ar'
       ? `السلام عليكم، أود طلب أو الاستفسار عن: ${product.name} (SKU: ${product.sku}) بسعر ${formatPrice(product.priceDZD)}`
       : `Bonjour TOP LAPTOP, je souhaite commander ou avoir des détails sur : ${product.name} (SKU: ${product.sku}) - ${formatPrice(product.priceDZD)}`;
@@ -46,7 +50,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (product.stock > 0) {
-      addToCart(product, 1);
+      if (!isItemInCart) {
+        addToCart(product, 1);
+      } else if (onOrderNow) {
+        onOrderNow(product);
+      }
+    }
+  };
+
+  const handleQuickOrderNow = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (product.stock > 0) {
+      if (!isItemInCart) {
+        addToCart(product, 1);
+      }
+      if (onOrderNow) {
+        onOrderNow(product);
+      }
     }
   };
 
@@ -211,10 +231,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
               <MessageCircle className="w-4 h-4" />
             </button>
 
+            {product.stock > 0 && (
+              <button
+                onClick={handleQuickOrderNow}
+                title={language === 'ar' ? 'اطلب الآن (تأكيد الطلب)' : 'Commander maintenant'}
+                className="p-2.5 sm:px-3 sm:py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs flex items-center gap-1 transition-all shadow-md cursor-pointer"
+              >
+                <Truck className="w-4 h-4" />
+                <span className="hidden sm:inline">{language === 'ar' ? 'اطلب الآن' : 'Commander'}</span>
+              </button>
+            )}
+
             <button
               disabled={product.stock <= 0}
               onClick={handleAddToCart}
-              className={`p-2.5 sm:px-3 sm:py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer ${
+              title={t('addToCart')}
+              className={`p-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer ${
                 product.stock <= 0
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                   : isItemInCart
@@ -228,15 +260,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
               }
             >
               {isItemInCart ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span className="hidden sm:inline">Ajouté</span>
-                </>
+                <Check className="w-4 h-4" />
               ) : (
-                <>
-                  <ShoppingCart className="w-4 h-4" />
-                  <span className="hidden sm:inline">{t('addToCart')}</span>
-                </>
+                <ShoppingCart className="w-4 h-4" />
               )}
             </button>
           </div>

@@ -245,6 +245,7 @@ const StorefrontContent: React.FC = () => {
                     key={product.id}
                     product={product}
                     onSelect={setSelectedProduct}
+                    onOrderNow={() => setIsCheckoutOpen(true)}
                   />
                 ))}
               </div>
@@ -262,6 +263,7 @@ const StorefrontContent: React.FC = () => {
       <ProductModal
         product={selectedProduct}
         onClose={() => setSelectedProduct(null)}
+        onOrderNow={() => setIsCheckoutOpen(true)}
       />
 
       {/* Checkout Modal (69 Algerian Wilayas) */}

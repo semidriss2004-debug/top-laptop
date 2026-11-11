@@ -26,9 +26,10 @@ import {
 interface ProductModalProps {
   product: Product | null;
   onClose: () => void;
+  onOrderNow?: () => void;
 }
 
-export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose }) => {
+export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, onOrderNow }) => {
   const { t, language } = useLanguage();
   const { addToCart, items } = useCart();
   const { settings } = useStore();
@@ -54,6 +55,18 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose }) 
   const handleAddToCart = () => {
     if (product.stock > 0) {
       addToCart(product, quantity);
+    }
+  };
+
+  const handleDirectOrder = () => {
+    if (product.stock > 0) {
+      if (!isItemInCart) {
+        addToCart(product, quantity);
+      }
+      onClose();
+      if (onOrderNow) {
+        onOrderNow();
+      }
     }
   };
 
@@ -350,7 +363,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose }) 
                     {isItemInCart ? (
                       <>
                         <Check className="w-4 h-4" />
-                        <span>Article déjà au panier</span>
+                        <span>{language === 'ar' ? 'تمت الإضافة للسلة' : 'Article déjà au panier'}</span>
                       </>
                     ) : (
                       <>
@@ -360,6 +373,21 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose }) 
                     )}
                   </button>
                 </div>
+
+                {/* Direct 1-Click Order / Checkout Button */}
+                {product.stock > 0 && (
+                  <button
+                    onClick={handleDirectOrder}
+                    className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,212,255,0.35)] transition-all cursor-pointer"
+                  >
+                    <Truck className="w-5 h-5" />
+                    <span>
+                      {language === 'ar'
+                        ? 'اطلب الآن — ملء معلومات التوصيل (69 ولاية)'
+                        : 'Commander maintenant — Remplir mes coordonnées'}
+                    </span>
+                  </button>
+                )}
 
                 <button
                   onClick={handleWhatsAppOrder}

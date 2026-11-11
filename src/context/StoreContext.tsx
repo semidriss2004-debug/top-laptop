@@ -574,28 +574,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       createdAt: new Date().toISOString()
     };
 
-    // Deduct stock for all items
-    setProducts(prev =>
-      prev.map(p => {
-        const orderItem = itemsWithSnapshot.find(i => i.productId === p.id);
-        if (orderItem) {
-          const updatedStock = Math.max(0, p.stock - orderItem.quantity);
-          recordStockMovement(
-            p.id,
-            'out_sale',
-            -orderItem.quantity,
-            `Commande ${orderId}`,
-            orderId
-          );
-          return {
-            ...p,
-            stock: updatedStock,
-            status: updatedStock === 0 ? 'out_of_stock' : p.status
-          };
-        }
-        return p;
-      })
-    );
+    // Deduct stock and record stock movement for all ordered items
+    itemsWithSnapshot.forEach(orderItem => {
+      recordStockMovement(
+        orderItem.productId,
+        'out_sale',
+        -orderItem.quantity,
+        `Commande ${orderId}`,
+        orderId
+      );
+    });
 
     setOrders(prev => [newOrder, ...prev]);
     logActivity('ORDER_STATUS_UPDATE', `Nouvelle commande enregistrée ${orderId} (${orderData.customerName})`, orderId);
@@ -604,25 +592,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Order Status Workflow
   const updateOrderStatus = (orderId: string, status: OrderStatus, note?: string) => {
+    const existingOrder = orders.find(o => o.id === orderId);
+    if (
+      existingOrder &&
+      (status === 'cancelled' || status === 'returned') &&
+      existingOrder.status !== 'cancelled' &&
+      existingOrder.status !== 'returned'
+    ) {
+      existingOrder.items.forEach(item => {
+        recordStockMovement(
+          item.productId,
+          'return_customer',
+          item.quantity,
+          `Retour/Annulation de la commande ${orderId}`,
+          orderId
+        );
+      });
+    }
+
     setOrders(prev =>
       prev.map(o => {
         if (o.id === orderId) {
-          // If status transitioned to 'returned' or 'cancelled', restock items
-          if ((status === 'cancelled' || status === 'returned') && o.status !== 'cancelled' && o.status !== 'returned') {
-            o.items.forEach(item => {
-              recordStockMovement(
-                item.productId,
-                'return_customer',
-                item.quantity,
-                `Retour/Annulation de la commande ${orderId}`,
-                orderId
-              );
-              setProducts(currProds =>
-                currProds.map(p => (p.id === item.productId ? { ...p, stock: p.stock + item.quantity } : p))
-              );
-            });
-          }
-
           const updatedHistory = [
             ...o.statusHistory,
             {
@@ -633,7 +623,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
           ];
 
-          logActivity('ORDER_STATUS_UPDATE', `Statut commande ${orderId} changé vers "${status}"`, orderId);
           return {
             ...o,
             status,
@@ -644,6 +633,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return o;
       })
     );
+    logActivity('ORDER_STATUS_UPDATE', `Statut commande ${orderId} changé vers "${status}"`, orderId);
   };
 
   // Delivery Companies Management

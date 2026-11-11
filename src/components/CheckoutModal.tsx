@@ -46,47 +46,64 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  if (!isOpen) return null;
+  const activeWilayas = useMemo(() => {
+    const filtered = (wilayas || []).filter(w => w.isActive);
+    return filtered.length > 0 ? filtered : (wilayas || []);
+  }, [wilayas]);
 
-  const activeWilayas = wilayas.filter(w => w.isActive);
-  const currentWilaya = activeWilayas.find(w => w.code === Number(selectedWilayaCode)) || activeWilayas[0] || wilayas[0] || {
-    code: 16,
-    nameFr: '16 - Alger',
-    nameAr: '16 - الجزائر',
-    communes: [{ id: '16-1', nameFr: 'Alger Centre', nameAr: 'الجزائر الوسطى' }],
-    isActive: true
-  };
+  const currentWilaya = useMemo(() => {
+    return (
+      activeWilayas.find(w => w.code === Number(selectedWilayaCode)) ||
+      activeWilayas[0] || {
+        code: 16,
+        nameFr: '16 - Alger',
+        nameAr: '16 - الجزائر',
+        communes: [{ id: '16-1', nameFr: 'Alger Centre', nameAr: 'الجزائر الوسطى' }],
+        isActive: true
+      }
+    );
+  }, [activeWilayas, selectedWilayaCode]);
 
   // Available communes for current wilaya
   const currentCommunes = currentWilaya?.communes || [];
 
   // Active delivery companies that support this wilaya
   const availableCompanies = useMemo(() => {
-    return deliveryCompanies.filter(comp => {
+    const supported = (deliveryCompanies || []).filter(comp => {
       if (!comp.isActive) return false;
-      const pricing = comp.wilayaPricing[selectedWilayaCode];
-      return pricing ? pricing.isSupported : false;
+      const pricing = comp.wilayaPricing?.[selectedWilayaCode];
+      return pricing ? pricing.isSupported : true;
     });
+    return supported.length > 0 ? supported : (deliveryCompanies || []).filter(c => c.isActive);
   }, [deliveryCompanies, selectedWilayaCode]);
 
   // Selected company object
-  const activeCompany = availableCompanies.find(c => c.id === selectedCompanyId) || availableCompanies[0] || deliveryCompanies[0];
+  const activeCompany = useMemo(() => {
+    return (
+      availableCompanies.find(c => c.id === selectedCompanyId) ||
+      availableCompanies[0] ||
+      (deliveryCompanies || [])[0]
+    );
+  }, [availableCompanies, selectedCompanyId, deliveryCompanies]);
 
   // Calculate live delivery fee from chosen company and method
   const deliveryFee = useMemo(() => {
     if (!activeCompany) return 800;
-    const pricing = activeCompany.wilayaPricing[selectedWilayaCode];
-    if (!pricing) return 800;
+    const pricing = activeCompany.wilayaPricing?.[selectedWilayaCode];
+    if (!pricing) return deliveryMethod === 'home' ? 800 : 500;
     return deliveryMethod === 'home' ? pricing.homePriceDZD : pricing.stopDeskPriceDZD;
   }, [activeCompany, selectedWilayaCode, deliveryMethod]);
+
+  // IMPORTANT: Early return MUST be placed after all React Hooks (useState / useMemo)
+  if (!isOpen) return null;
 
   const totalAmount = subtotalDZD + deliveryFee;
   const formatPrice = (price: number) => price.toLocaleString('fr-DZ') + ' ' + t('dzd');
 
-  // Validate Algerian phone number (05, 06, 07 or +213)
+  // Validate Algerian phone number (05, 06, 07, landline 02-04, or +213)
   const validatePhone = (num: string) => {
-    const cleaned = num.replace(/\s+/g, '');
-    const algeriaRegex = /^(0|\+213|213)(5|6|7)[0-9]{8}$/;
+    const cleaned = num.replace(/[\s\-\.\(\)]+/g, '');
+    const algeriaRegex = /^(0|\+213|00213|213)[2-9][0-9]{7,8}$/;
     return algeriaRegex.test(cleaned);
   };
 
@@ -94,8 +111,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     e.preventDefault();
     setErrorMsg('');
 
+    if (items.length === 0) {
+      setErrorMsg(
+        language === 'ar'
+          ? 'سلة المشتريات فارغة. يرجى إضافة منتج قبل تأكيد الطلب.'
+          : 'Votre panier est vide. Veuillez ajouter un article avant de confirmer.'
+      );
+      return;
+    }
+
     if (!customerName.trim()) {
-      setErrorMsg(language === 'ar' ? 'يرجى كتابة الاسم واللقب.' : 'Veuillez saisir votre nom et prénom.');
+      setErrorMsg(
+        language === 'ar'
+          ? 'يرجى كتابة الاسم واللقب الكامل.'
+          : 'Veuillez saisir votre nom et prénom.'
+      );
       return;
     }
 
@@ -111,8 +141,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (!address.trim()) {
       setErrorMsg(
         language === 'ar'
-          ? 'يرجى إدخال عنوان التوصيل بالتفصيل.'
-          : 'Veuillez préciser votre adresse de livraison.'
+          ? 'يرجى إدخال عنوان التوصيل أو مكتب الاستلام بالتفصيل.'
+          : 'Veuillez préciser votre adresse de livraison ou bureau Stop Desk.'
       );
       return;
     }
@@ -168,41 +198,51 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       onOrderSuccess(newOrder);
     } catch (err) {
       console.error(err);
-      setErrorMsg('Erreur lors de la validation de la commande. Veuillez réessayer.');
+      setErrorMsg(
+        language === 'ar'
+          ? 'حدث خطأ أثناء تأكيد الطلب. يرجى المحاولة مرة أخرى.'
+          : 'Erreur lors de la validation de la commande. Veuillez réessayer.'
+      );
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-sm">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-sm"
+    >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-2xl bg-[#091122] rounded-3xl border border-cyan-500/40 shadow-[0_0_50px_rgba(0,140,255,0.3)] overflow-hidden my-auto max-h-[94vh] flex flex-col"
+        className="relative w-full max-w-2xl bg-[#091122] rounded-3xl border border-cyan-500/40 shadow-[0_0_50px_rgba(0,140,255,0.3)] overflow-hidden my-auto max-h-[94dvh] flex flex-col"
       >
         {/* Header */}
-        <div className="p-6 border-b border-blue-900/40 bg-[#060C18] flex items-center justify-between">
+        <div className="p-4 sm:p-6 border-b border-blue-900/40 bg-[#060C18] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-md">
               <Truck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-white">{t('checkoutTitle')}</h3>
+              <h3 className="text-base sm:text-lg font-black text-white">{t('checkoutTitle')}</h3>
               <p className="text-xs text-slate-400">
-                {language === 'ar' ? 'توصيل متاح إلى 69 ولاية جزائرية' : 'Livraison express vers les 69 Wilayas d\'Algérie'}
+                {language === 'ar'
+                  ? 'املأ معلوماتك لتأكيد الطلب — توصيل سريع إلى 69 ولاية جزائرية'
+                  : 'Remplissez vos informations — Livraison express vers les 69 Wilayas d\'Algérie'}
               </p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-lg bg-blue-950/60 text-slate-400 hover:text-white border border-blue-900/40"
+            className="p-2 rounded-lg bg-blue-950/60 text-slate-400 hover:text-white border border-blue-900/40 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs sm:text-sm">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs sm:text-sm">
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400" />
@@ -257,8 +297,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   const code = Number(e.target.value);
                   setSelectedWilayaCode(code);
                   const w = wilayas.find(item => item.code === code);
-                  if (w && w.communes.length > 0) {
+                  if (w && w.communes && w.communes.length > 0) {
                     setSelectedCommuneName(w.communes[0].nameFr);
+                  } else {
+                    setSelectedCommuneName('Centre');
                   }
                 }}
                 className="w-full bg-[#050A14] text-white text-xs sm:text-sm rounded-xl px-3 py-2.5 border border-blue-900/60 focus:border-cyan-400 focus:outline-none"
@@ -274,7 +316,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5 text-blue-400" />
-                <span>Commune de livraison *</span>
+                <span>{language === 'ar' ? 'البلدية *' : 'Commune de livraison *'}</span>
               </label>
               {currentCommunes.length > 0 ? (
                 <select
@@ -294,7 +336,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   required
                   value={selectedCommuneName}
                   onChange={(e) => setSelectedCommuneName(e.target.value)}
-                  placeholder="Nom de votre commune..."
+                  placeholder={language === 'ar' ? 'اسم البلدية...' : 'Nom de votre commune...'}
                   className="w-full bg-[#050A14] text-white text-xs sm:text-sm rounded-xl px-3.5 py-2.5 border border-blue-900/60 focus:border-cyan-400 focus:outline-none"
                 />
               )}
@@ -303,13 +345,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
           {/* Delivery Company & Method Choice */}
           <div className="bg-[#050A14] p-4 rounded-2xl border border-blue-900/50 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-bold text-cyan-300 text-xs uppercase tracking-wider font-mono flex items-center gap-1.5">
                 <Truck className="w-4 h-4" />
-                <span>Société de Livraison & Mode</span>
+                <span>{language === 'ar' ? 'شركة التوصيل وطريقة الاستلام' : 'Société de Livraison & Mode'}</span>
               </span>
               <span className="text-[10px] text-slate-400">
-                Tarifs calculés pour {currentWilaya.nameFr}
+                {language === 'ar'
+                  ? `أسعار التوصيل لولاية ${currentWilaya.nameAr}`
+                  : `Tarifs calculés pour ${currentWilaya.nameFr}`}
               </span>
             </div>
 
@@ -319,9 +363,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <button
                   type="button"
                   key={comp.id}
-                  onClick={() => setSelectedCompanyId(comp.id)}
-                  className={`p-2.5 rounded-xl border text-xs font-bold transition-all text-center flex flex-col items-center justify-center gap-1 ${
-                    selectedCompanyId === comp.id
+                  onClick={() => {
+                    setSelectedCompanyId(comp.id);
+                    if (!comp.supportsStopDesk && deliveryMethod === 'stopdesk') {
+                      setDeliveryMethod('home');
+                    }
+                  }}
+                  className={`p-2.5 rounded-xl border text-xs font-bold transition-all text-center flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                    activeCompany?.id === comp.id
                       ? 'bg-blue-600/30 border-cyan-400 text-white shadow-[0_0_12px_rgba(0,140,255,0.3)]'
                       : 'bg-[#080F1C] border-blue-900/40 text-slate-400 hover:text-white'
                   }`}
@@ -332,11 +381,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
 
             {/* Home Delivery vs Stop Desk toggle */}
-            <div className="grid grid-cols-2 gap-2 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setDeliveryMethod('home')}
-                className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-between ${
+                className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
                   deliveryMethod === 'home'
                     ? 'bg-blue-950 border-cyan-400 text-cyan-300 shadow-sm'
                     : 'bg-[#080F1C] border-blue-900/40 text-slate-400'
@@ -344,26 +393,30 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               >
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4" />
-                  <span>À Domicile</span>
+                  <span>{language === 'ar' ? 'توصيل للمنزل (À Domicile)' : 'À Domicile'}</span>
                 </div>
-                <span className="font-mono">{formatPrice(activeCompany?.wilayaPricing[selectedWilayaCode]?.homePriceDZD || 800)}</span>
+                <span className="font-mono">
+                  {formatPrice(activeCompany?.wilayaPricing?.[selectedWilayaCode]?.homePriceDZD ?? 800)}
+                </span>
               </button>
 
               <button
                 type="button"
-                disabled={!activeCompany?.supportsStopDesk}
+                disabled={activeCompany ? !activeCompany.supportsStopDesk : false}
                 onClick={() => setDeliveryMethod('stopdesk')}
-                className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-between ${
+                className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
                   deliveryMethod === 'stopdesk'
                     ? 'bg-blue-950 border-cyan-400 text-cyan-300 shadow-sm'
                     : 'bg-[#080F1C] border-blue-900/40 text-slate-400'
-                } ${!activeCompany?.supportsStopDesk ? 'opacity-40 cursor-not-allowed' : ''}`}
+                } ${activeCompany && !activeCompany.supportsStopDesk ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 <div className="flex items-center gap-2">
                   <Package className="w-4 h-4" />
-                  <span>Point Relais (Stop Desk)</span>
+                  <span>{language === 'ar' ? 'مكتب التوصيل (Stop Desk)' : 'Point Relais (Stop Desk)'}</span>
                 </div>
-                <span className="font-mono">{formatPrice(activeCompany?.wilayaPricing[selectedWilayaCode]?.stopDeskPriceDZD || 500)}</span>
+                <span className="font-mono">
+                  {formatPrice(activeCompany?.wilayaPricing?.[selectedWilayaCode]?.stopDeskPriceDZD ?? 500)}
+                </span>
               </button>
             </div>
           </div>
@@ -372,15 +425,38 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-blue-400" />
-              <span>Adresse exacte ou bureau de retrait *</span>
+              <span>
+                {language === 'ar'
+                  ? 'العنوان الكامل أو مكتب الاستلام (Stop Desk) *'
+                  : 'Adresse exacte ou bureau de retrait *'}
+              </span>
             </label>
             <input
               type="text"
               required
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="ex: 15 Rue Didouche Mourad, Étage 2 ou Bureau Stop Desk Yalidine"
+              placeholder={
+                language === 'ar'
+                  ? 'مثال: حي 5 جويلية، عمارة 4 أو مكتب ياليدين وسط المدينة'
+                  : 'ex: 15 Rue Didouche Mourad, Étage 2 ou Bureau Stop Desk Yalidine'
+              }
               className="w-full bg-[#050A14] text-white text-xs sm:text-sm rounded-xl px-3.5 py-2.5 border border-blue-900/60 focus:border-cyan-400 focus:outline-none"
+            />
+          </div>
+
+          {/* Optional Order Notes */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-slate-400" />
+              <span>{t('notes')}</span>
+            </label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder={t('notesPlaceholder')}
+              className="w-full bg-[#050A14] text-white text-xs sm:text-sm rounded-xl px-3.5 py-2 border border-blue-900/60 focus:border-cyan-400 focus:outline-none"
             />
           </div>
 
@@ -435,11 +511,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {/* Pricing Summary */}
           <div className="bg-[#050A14] p-4 rounded-2xl border border-blue-900/50 space-y-2 text-xs">
             <div className="flex justify-between text-slate-400">
-              <span>{t('subtotal')} ({items.length} articles)</span>
+              <span>{t('subtotal')} ({items.length} {t('cartItemsCount')})</span>
               <span className="font-mono">{formatPrice(subtotalDZD)}</span>
             </div>
             <div className="flex justify-between text-slate-400">
-              <span>Frais de port ({activeCompany?.name} - {currentWilaya.nameFr}) :</span>
+              <span>
+                {language === 'ar'
+                  ? `سعر التوصيل (${activeCompany?.name || 'Yalidine'} - ${currentWilaya.nameAr}) :`
+                  : `Frais de port (${activeCompany?.name || 'Yalidine'} - ${currentWilaya.nameFr}) :`}
+              </span>
               <span className="font-mono text-cyan-300">{formatPrice(deliveryFee)}</span>
             </div>
             <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-blue-900/40">
