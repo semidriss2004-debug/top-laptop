@@ -143,7 +143,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         const img = new window.Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_DIM = 1000;
+          const MAX_DIM = 850;
           let width = img.width;
           let height = img.height;
 
@@ -160,7 +160,12 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.85));
+            const webpUrl = canvas.toDataURL('image/webp', 0.8);
+            if (webpUrl.startsWith('data:image/webp')) {
+              resolve(webpUrl);
+            } else {
+              resolve(canvas.toDataURL('image/jpeg', 0.8));
+            }
           } else {
             resolve(event.target?.result as string);
           }
@@ -182,7 +187,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         const dataUrl = await processImageFile(files[i]);
         processed.push(dataUrl);
       }
-      setImagesList(prev => [...prev, ...processed]);
+      // Make newly uploaded image the primary image immediately
+      setImagesList(prev => [...processed, ...prev]);
     } catch (e) {
       console.error('Error uploading image:', e);
     } finally {
@@ -196,7 +202,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const handleAddExternalUrl = () => {
     const trimmed = imageUrlInput.trim();
     if (!trimmed) return;
-    setImagesList(prev => [...prev, trimmed]);
+    setImagesList(prev => [trimmed, ...prev]);
     setImageUrlInput('');
   };
 
@@ -300,7 +306,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const images = imagesList.filter(url => url.trim().length > 0);
+    const pendingUrl = imageUrlInput.trim();
+    const combinedImages = pendingUrl ? [pendingUrl, ...imagesList] : imagesList;
+    const images = combinedImages.filter(url => url.trim().length > 0);
 
     // Digital details payload
     let digitalDetails = undefined;

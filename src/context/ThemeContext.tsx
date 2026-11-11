@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ThemeConfig, ThemeId, ThemeSettings } from '../types';
 import { THEMES_LIST, DEFAULT_ROTATION_ORDER } from '../themes/themesConfig';
+import { fetchAllCloudAndLocalState, persistStoreKey } from '../services/storage';
 
 interface ThemeContextType {
   activeTheme: ThemeConfig;
@@ -34,6 +35,22 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [previewThemeId, setPreviewThemeId] = useState<ThemeId | null>(null);
 
+  // Hydrate theme settings from Cloud / IndexedDB
+  useEffect(() => {
+    let isMounted = true;
+    fetchAllCloudAndLocalState().then((remote) => {
+      if (isMounted && remote.themeSettings && typeof remote.themeSettings === 'object') {
+        setThemeSettings((prev) => ({
+          ...prev,
+          ...remote.themeSettings,
+        }));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Check Weekly Auto Rotation
   useEffect(() => {
     if (themeSettings.autoRotateWeekly && themeSettings.rotationOrder.length > 1) {
@@ -52,21 +69,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             activeThemeId: nextTheme,
             lastRotatedDate: now.toISOString()
           };
-          localStorage.setItem('top_laptop_theme_settings', JSON.stringify(updated));
+          persistStoreKey('themeSettings', updated, false);
           return updated;
         });
       }
     }
   }, [themeSettings.autoRotateWeekly, themeSettings.rotationOrder, themeSettings.activeThemeId, themeSettings.lastRotatedDate]);
-
-  // Persist theme settings
-  useEffect(() => {
-    try {
-      localStorage.setItem('top_laptop_theme_settings', JSON.stringify(themeSettings));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [themeSettings]);
 
   const effectiveThemeId = previewThemeId || themeSettings.activeThemeId;
   const activeTheme = THEMES_LIST.find(t => t.id === effectiveThemeId) || THEMES_LIST[0];
@@ -84,11 +92,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [activeTheme]);
 
   const setTheme = (themeId: ThemeId) => {
-    setThemeSettings(prev => ({
-      ...prev,
-      activeThemeId: themeId,
-      lastRotatedDate: new Date().toISOString()
-    }));
+    setThemeSettings(prev => {
+      const next = {
+        ...prev,
+        activeThemeId: themeId,
+        lastRotatedDate: new Date().toISOString()
+      };
+      persistStoreKey('themeSettings', next, true);
+      return next;
+    });
     setPreviewThemeId(null);
   };
 
@@ -101,7 +113,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateThemeSettings = (newSettings: Partial<ThemeSettings>) => {
-    setThemeSettings(prev => ({ ...prev, ...newSettings }));
+    setThemeSettings(prev => {
+      const next = { ...prev, ...newSettings };
+      persistStoreKey('themeSettings', next, true);
+      return next;
+    });
   };
 
   return (

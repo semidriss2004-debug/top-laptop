@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { 
@@ -25,12 +25,29 @@ export const StoreSettingsView: React.FC = () => {
   const [nif, setNif] = useState(settings.taxNumberNIF || '');
 
   // Official Social Media Links (Phase 4)
-  const [facebook, setFacebook] = useState(settings.socialLinks.facebook || '');
-  const [instagram, setInstagram] = useState(settings.socialLinks.instagram || '');
-  const [tiktok, setTiktok] = useState(settings.socialLinks.tiktok || '');
-  const [youtube, setYoutube] = useState(settings.socialLinks.youtube || '');
-  const [linkedin, setLinkedin] = useState(settings.socialLinks.linkedin || '');
+  const [facebook, setFacebook] = useState(settings.socialLinks?.facebook || '');
+  const [instagram, setInstagram] = useState(settings.socialLinks?.instagram || '');
+  const [tiktok, setTiktok] = useState(settings.socialLinks?.tiktok || '');
+  const [youtube, setYoutube] = useState(settings.socialLinks?.youtube || '');
+  const [linkedin, setLinkedin] = useState(settings.socialLinks?.linkedin || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Sync local form state when settings hydrate from Cloud / IndexedDB
+  useEffect(() => {
+    setStoreName(settings.storeName || 'TOP LAPTOP ALGERIE');
+    setFlatFee(settings.flatDeliveryFeeDZD);
+    setWhatsapp(settings.whatsappNumber || '');
+    setContactPhone(settings.contactPhone || '');
+    setContactEmail(settings.contactEmail || '');
+    setStoreAddress(settings.storeAddress || '');
+    setRc(settings.tradeRegisterRC || '');
+    setNif(settings.taxNumberNIF || '');
+    setFacebook(settings.socialLinks?.facebook || '');
+    setInstagram(settings.socialLinks?.instagram || '');
+    setTiktok(settings.socialLinks?.tiktok || '');
+    setYoutube(settings.socialLinks?.youtube || '');
+    setLinkedin(settings.socialLinks?.linkedin || '');
+  }, [settings]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

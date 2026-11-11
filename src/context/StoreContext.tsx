@@ -7,7 +7,6 @@ import {
   Wilaya, 
   DeliveryCompany, 
   Employee, 
-  EmployeeRole, 
   EmployeePermission, 
   ActivityLogEntry, 
   ActivityAction, 
@@ -18,6 +17,14 @@ import {
 import { INITIAL_PRODUCTS, INITIAL_SETTINGS, INITIAL_EMPLOYEES } from '../data/initialProducts';
 import { INITIAL_69_WILAYAS } from '../data/wilayas69';
 import { INITIAL_DELIVERY_COMPANIES } from '../data/initialDeliveryCompanies';
+import {
+  fetchAllCloudAndLocalState,
+  persistStoreKey,
+  persistStoreBatch,
+  idbGet,
+  idbSet,
+  safeLocalStorageSet,
+} from '../services/storage';
 
 interface StoreContextType {
   products: Product[];
@@ -79,17 +86,71 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
+const DEFAULT_SAMPLE_ORDERS: Order[] = [
+  {
+    id: 'TL-8941',
+    bonDeLivraisonRef: 'BL-2026-8941',
+    customerName: 'Mohamed Amine Larbi',
+    customerPhone: '0555 44 33 22',
+    wilaya: { code: 16, nameFr: '16 - Alger', nameAr: '16 - الجزائر' },
+    commune: { nameFr: 'Hydra', nameAr: 'حيدرة' },
+    address: '12 Boulevard des Martyrs, Hydra',
+    deliveryCompanyId: 'yalidine',
+    deliveryCompanyName: 'Yalidine Express',
+    deliveryMethod: 'home',
+    shippingTrackingNumber: 'YAL-8941-DZ',
+    items: [
+      {
+        productId: 'tl-rog-strix-g16',
+        sku: 'TL-ASUS-G16-4070-01',
+        barcode: '6931234560012',
+        name: 'ASUS ROG Strix G16 (2024)',
+        priceDZD: 245000,
+        purchasePriceDZD: 215000,
+        quantity: 1,
+        image: 'https://images.unsplash.com/photo-1603302576837-37561b2e2302?auto=format&fit=crop&w=1000&q=80'
+      }
+    ],
+    subtotalDZD: 245000,
+    deliveryFeeDZD: 550,
+    totalDZD: 245550,
+    totalPurchaseCostDZD: 215000,
+    netProfitDZD: 30000,
+    paymentMethod: 'cod',
+    paymentStatus: 'pending',
+    status: 'shipped',
+    statusHistory: [
+      {
+        status: 'new',
+        changedAt: new Date(Date.now() - 3600000 * 48).toISOString(),
+        changedBy: 'Client Web'
+      },
+      {
+        status: 'confirmed',
+        changedAt: new Date(Date.now() - 3600000 * 24).toISOString(),
+        changedBy: 'Karim Bencherif'
+      },
+      {
+        status: 'shipped',
+        changedAt: new Date(Date.now() - 3600000 * 12).toISOString(),
+        changedBy: 'Yacine Merah',
+        note: 'Colis remis à Yalidine Express'
+      }
+    ],
+    notes: 'Appeler avant livraison svp',
+    createdAt: new Date(Date.now() - 3600000 * 48).toISOString()
+  }
+];
+
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Products
+  // 1. Products (Fixed: never reset if categories are edited or deleted)
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const saved = localStorage.getItem('top_laptop_products_v3') || localStorage.getItem('top_laptop_products_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const hasSoftware = parsed.some((p: Product) => p.category === 'software_digital');
-          const hasBags = parsed.some((p: Product) => p.category === 'laptop_bags_cases');
-          if (hasSoftware && hasBags) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed;
         }
       }
     } catch (e) {
@@ -104,7 +165,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const saved = localStorage.getItem('top_laptop_wilayas_69');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length === 69) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {
       console.error(e);
@@ -116,7 +177,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [deliveryCompanies, setDeliveryCompanies] = useState<DeliveryCompany[]>(() => {
     try {
       const saved = localStorage.getItem('top_laptop_delivery_companies');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -127,7 +191,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [employees, setEmployees] = useState<Employee[]>(() => {
     try {
       const saved = localStorage.getItem('top_laptop_employees');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -149,73 +216,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [orders, setOrders] = useState<Order[]>(() => {
     try {
       const saved = localStorage.getItem('top_laptop_orders_v2');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
-    // Realistic initial sample order
-    return [
-      {
-        id: 'TL-8941',
-        bonDeLivraisonRef: 'BL-2026-8941',
-        customerName: 'Mohamed Amine Larbi',
-        customerPhone: '0555 44 33 22',
-        wilaya: { code: 16, nameFr: '16 - Alger', nameAr: '16 - الجزائر' },
-        commune: { nameFr: 'Hydra', nameAr: 'حيدرة' },
-        address: '12 Boulevard des Martyrs, Hydra',
-        deliveryCompanyId: 'yalidine',
-        deliveryCompanyName: 'Yalidine Express',
-        deliveryMethod: 'home',
-        shippingTrackingNumber: 'YAL-8941-DZ',
-        items: [
-          {
-            productId: 'tl-rog-strix-g16',
-            sku: 'TL-ASUS-G16-4070-01',
-            barcode: '6931234560012',
-            name: 'ASUS ROG Strix G16 (2024)',
-            priceDZD: 245000,
-            purchasePriceDZD: 215000,
-            quantity: 1,
-            image: 'https://images.unsplash.com/photo-1603302576837-37561b2e2302?auto=format&fit=crop&w=1000&q=80'
-          }
-        ],
-        subtotalDZD: 245000,
-        deliveryFeeDZD: 550,
-        totalDZD: 245550,
-        totalPurchaseCostDZD: 215000,
-        netProfitDZD: 30000,
-        paymentMethod: 'cod',
-        paymentStatus: 'pending',
-        status: 'shipped',
-        statusHistory: [
-          {
-            status: 'new',
-            changedAt: new Date(Date.now() - 3600000 * 48).toISOString(),
-            changedBy: 'Client Web'
-          },
-          {
-            status: 'confirmed',
-            changedAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-            changedBy: 'Karim Bencherif'
-          },
-          {
-            status: 'shipped',
-            changedAt: new Date(Date.now() - 3600000 * 12).toISOString(),
-            changedBy: 'Yacine Merah',
-            note: 'Colis remis à Yalidine Express'
-          }
-        ],
-        notes: 'Appeler avant livraison svp',
-        createdAt: new Date(Date.now() - 3600000 * 48).toISOString()
-      }
-    ];
+    return DEFAULT_SAMPLE_ORDERS;
   });
 
   // 6. Inventory Movements
   const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>(() => {
     try {
       const saved = localStorage.getItem('top_laptop_inventory_movements');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -254,7 +272,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>(() => {
     try {
       const saved = localStorage.getItem('top_laptop_activity_logs');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -285,85 +306,67 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [settings, setSettings] = useState<StoreSettings>(() => {
     try {
       const saved = localStorage.getItem('top_laptop_settings_v2');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return { ...INITIAL_SETTINGS, ...parsed, socialLinks: { ...INITIAL_SETTINGS.socialLinks, ...(parsed.socialLinks || {}) } };
+        }
+      }
     } catch (e) {
       console.error(e);
     }
     return INITIAL_SETTINGS;
   });
 
-  // Persist State to LocalStorage
+  // Hydrate from Netlify Cloud Blobs & IndexedDB on startup
   useEffect(() => {
-    try {
-      localStorage.setItem('top_laptop_products_v3', JSON.stringify(products));
-    } catch (e) {
-      console.warn(e);
-    }
-  }, [products]);
+    let isMounted = true;
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('top_laptop_wilayas_69', JSON.stringify(wilayas));
-    } catch (e) {
-      console.warn(e);
-    }
-  }, [wilayas]);
+    fetchAllCloudAndLocalState().then((remote) => {
+      if (!isMounted) return;
+      if (Array.isArray(remote.products)) {
+        setProducts(remote.products);
+      }
+      if (remote.settings && typeof remote.settings === 'object') {
+        setSettings({
+          ...INITIAL_SETTINGS,
+          ...remote.settings,
+          socialLinks: {
+            ...INITIAL_SETTINGS.socialLinks,
+            ...(remote.settings.socialLinks || {})
+          }
+        });
+      }
+      if (Array.isArray(remote.wilayas) && remote.wilayas.length > 0) {
+        setWilayas(remote.wilayas);
+      }
+      if (Array.isArray(remote.deliveryCompanies)) {
+        setDeliveryCompanies(remote.deliveryCompanies);
+      }
+      if (Array.isArray(remote.employees) && remote.employees.length > 0) {
+        setEmployees(remote.employees);
+      }
+      if (Array.isArray(remote.orders)) {
+        setOrders(remote.orders);
+      }
+      if (Array.isArray(remote.inventoryMovements)) {
+        setInventoryMovements(remote.inventoryMovements);
+      }
+      if (Array.isArray(remote.activityLogs)) {
+        setActivityLogs(remote.activityLogs);
+      }
+    });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('top_laptop_delivery_companies', JSON.stringify(deliveryCompanies));
-    } catch (e) {
-      console.warn(e);
-    }
-  }, [deliveryCompanies]);
+    idbGet<DatabaseBackup[]>('backups').then((savedBackups) => {
+      if (isMounted && Array.isArray(savedBackups)) {
+        setBackups(savedBackups);
+      }
+    });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('top_laptop_employees', JSON.stringify(employees));
-    } catch (e) {
-      console.warn(e);
-    }
-  }, [employees]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('top_laptop_orders_v2', JSON.stringify(orders));
-    } catch (e) {
-      console.warn(e);
-    }
-  }, [orders]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('top_laptop_inventory_movements', JSON.stringify(inventoryMovements));
-    } catch (e) {
-      console.warn(e);
-    }
-  }, [inventoryMovements]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('top_laptop_activity_logs', JSON.stringify(activityLogs));
-    } catch (e) {
-      console.warn(e);
-    }
-  }, [activityLogs]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('top_laptop_backups', JSON.stringify(backups));
-    } catch (e) {
-      console.warn(e);
-    }
-  }, [backups]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('top_laptop_settings_v2', JSON.stringify(settings));
-    } catch (e) {
-      console.warn(e);
-    }
-  }, [settings]);
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Logging Activity
   const logActivity = (action: ActivityAction, details: string, targetRecord?: string) => {
@@ -376,7 +379,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       details,
       timestamp: new Date().toISOString()
     };
-    setActivityLogs(prev => [entry, ...prev.slice(0, 499)]); // Keep last 500 logs
+    setActivityLogs(prev => {
+      const next = [entry, ...prev.slice(0, 499)];
+      persistStoreKey('activityLogs', next, false);
+      return next;
+    });
   };
 
   // RBAC Permission Checker
@@ -391,7 +398,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (found) {
       const updated = { ...found, lastLoginAt: new Date().toISOString() };
       setCurrentEmployee(updated);
-      localStorage.setItem('top_laptop_current_employee', JSON.stringify(updated));
+      safeLocalStorageSet('top_laptop_current_employee', updated);
       logActivity('LOGIN', `Connexion de l'employé ${found.name} (${found.role})`);
       return updated;
     }
@@ -406,7 +413,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.removeItem('top_laptop_current_employee');
   };
 
-  // Product CRUD with automatic Profit Calculations
+  // Product CRUD with automatic Profit Calculations & Immediate Cloud + IndexedDB Persistence
   const addProduct = (productData: Omit<Product, 'id' | 'createdAt' | 'profitDZD' | 'profitMarginPercent'>) => {
     const profitDZD = productData.priceDZD - productData.purchasePriceDZD;
     const profitMarginPercent = productData.priceDZD > 0 
@@ -421,59 +428,99 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       createdAt: new Date().toISOString()
     };
 
-    setProducts(prev => [newProduct, ...prev]);
+    const initialMovement: InventoryMovement = {
+      id: 'mov-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 4),
+      productId: newProduct.id,
+      productName: newProduct.name,
+      sku: newProduct.sku,
+      type: 'in_restock',
+      quantityChange: newProduct.stock,
+      previousStock: 0,
+      newStock: newProduct.stock,
+      reason: 'Création initiale du produit',
+      performedBy: currentEmployee?.name || 'Système',
+      createdAt: new Date().toISOString()
+    };
 
-    // Record initial stock movement
-    recordStockMovement(
-      newProduct.id,
-      'in_restock',
-      newProduct.stock,
-      'Création initiale du produit',
-      undefined
-    );
+    setProducts(prev => {
+      const next = [newProduct, ...prev];
+      persistStoreKey('products', next, true);
+      return next;
+    });
+
+    setInventoryMovements(prev => {
+      const next = [initialMovement, ...prev];
+      persistStoreKey('inventoryMovements', next, false);
+      return next;
+    });
 
     logActivity('PRODUCT_CREATE', `Création du produit ${newProduct.name} (SKU: ${newProduct.sku})`, newProduct.id);
   };
 
   const updateProduct = (id: string, updated: Partial<Product>) => {
-    setProducts(prev =>
-      prev.map(p => {
+    let stockMovementToAdd: InventoryMovement | null = null;
+    let updatedProductName = id;
+
+    setProducts(prev => {
+      const next = prev.map(p => {
         if (p.id === id) {
+          updatedProductName = updated.name || p.name;
           const newPrice = updated.priceDZD !== undefined ? updated.priceDZD : p.priceDZD;
           const newPurchase = updated.purchasePriceDZD !== undefined ? updated.purchasePriceDZD : p.purchasePriceDZD;
           const profitDZD = newPrice - newPurchase;
           const profitMarginPercent = newPrice > 0 ? Number(((profitDZD / newPrice) * 100).toFixed(2)) : 0;
 
-          // Check if stock changed directly
           if (updated.stock !== undefined && updated.stock !== p.stock) {
             const diff = updated.stock - p.stock;
-            recordStockMovement(
-              p.id,
-              diff > 0 ? 'in_restock' : 'adjustment',
-              diff,
-              'Ajustement manuel du stock depuis la fiche produit'
-            );
+            stockMovementToAdd = {
+              id: 'mov-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 4),
+              productId: p.id,
+              productName: updatedProductName,
+              sku: updated.sku || p.sku || 'N/A',
+              type: diff > 0 ? 'in_restock' : 'adjustment',
+              quantityChange: diff,
+              previousStock: p.stock,
+              newStock: Math.max(0, updated.stock),
+              reason: 'Ajustement manuel du stock depuis la fiche produit',
+              performedBy: currentEmployee?.name || 'Système',
+              createdAt: new Date().toISOString()
+            };
           }
 
-          const merged: Product = {
+          return {
             ...p,
             ...updated,
             profitDZD,
             profitMarginPercent,
             updatedAt: new Date().toISOString()
           };
-
-          logActivity('PRODUCT_UPDATE', `Mise à jour du produit ${p.name}`, id);
-          return merged;
         }
         return p;
-      })
-    );
+      });
+
+      persistStoreKey('products', next, true);
+      return next;
+    });
+
+    if (stockMovementToAdd) {
+      const mov = stockMovementToAdd;
+      setInventoryMovements(prev => {
+        const next = [mov, ...prev];
+        persistStoreKey('inventoryMovements', next, false);
+        return next;
+      });
+    }
+
+    logActivity('PRODUCT_UPDATE', `Mise à jour du produit ${updatedProductName}`, id);
   };
 
   const deleteProduct = (id: string) => {
     const prod = products.find(p => p.id === id);
-    setProducts(prev => prev.filter(p => p.id !== id));
+    setProducts(prev => {
+      const next = prev.filter(p => p.id !== id);
+      persistStoreKey('products', next, true);
+      return next;
+    });
     logActivity('PRODUCT_DELETE', `Suppression du produit ${prod?.name || id}`, id);
   };
 
@@ -504,19 +551,26 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       createdAt: new Date().toISOString()
     };
 
-    setInventoryMovements(prev => [movement, ...prev]);
-    setProducts(prev =>
-      prev.map(p =>
+    setInventoryMovements(prev => {
+      const next = [movement, ...prev];
+      persistStoreKey('inventoryMovements', next, false);
+      return next;
+    });
+
+    setProducts(prev => {
+      const next = prev.map(p =>
         p.id === productId
           ? {
               ...p,
               stock: newStock,
-              status: newStock === 0 ? 'out_of_stock' : 'available',
+              status: (newStock === 0 ? 'out_of_stock' : 'available') as Product['status'],
               updatedAt: new Date().toISOString()
             }
           : p
-      )
-    );
+      );
+      persistStoreKey('products', next, true);
+      return next;
+    });
   };
 
   // Create Order with Snapshot Purchase Costs & License Assignment
@@ -585,7 +639,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
     });
 
-    setOrders(prev => [newOrder, ...prev]);
+    setOrders(prev => {
+      const next = [newOrder, ...prev];
+      persistStoreKey('orders', next, true);
+      return next;
+    });
     logActivity('ORDER_STATUS_UPDATE', `Nouvelle commande enregistrée ${orderId} (${orderData.customerName})`, orderId);
     return newOrder;
   };
@@ -610,8 +668,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
     }
 
-    setOrders(prev =>
-      prev.map(o => {
+    setOrders(prev => {
+      const next = prev.map(o => {
         if (o.id === orderId) {
           const updatedHistory = [
             ...o.statusHistory,
@@ -631,8 +689,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           };
         }
         return o;
-      })
-    );
+      });
+      persistStoreKey('orders', next, true);
+      return next;
+    });
     logActivity('ORDER_STATUS_UPDATE', `Statut commande ${orderId} changé vers "${status}"`, orderId);
   };
 
@@ -642,25 +702,35 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ...companyData,
       id: 'del-' + Date.now().toString(36)
     };
-    setDeliveryCompanies(prev => [...prev, newComp]);
+    setDeliveryCompanies(prev => {
+      const next = [...prev, newComp];
+      persistStoreKey('deliveryCompanies', next, true);
+      return next;
+    });
     logActivity('DELIVERY_COMPANY_UPDATE', `Ajout de la société de livraison ${newComp.name}`, newComp.id);
   };
 
   const updateDeliveryCompany = (id: string, updated: Partial<DeliveryCompany>) => {
-    setDeliveryCompanies(prev =>
-      prev.map(c => (c.id === id ? { ...c, ...updated } : c))
-    );
+    setDeliveryCompanies(prev => {
+      const next = prev.map(c => (c.id === id ? { ...c, ...updated } : c));
+      persistStoreKey('deliveryCompanies', next, true);
+      return next;
+    });
     logActivity('DELIVERY_COMPANY_UPDATE', `Modification de la société de livraison ${id}`, id);
   };
 
   const deleteDeliveryCompany = (id: string) => {
-    setDeliveryCompanies(prev => prev.filter(c => c.id !== id));
+    setDeliveryCompanies(prev => {
+      const next = prev.filter(c => c.id !== id);
+      persistStoreKey('deliveryCompanies', next, true);
+      return next;
+    });
     logActivity('DELIVERY_COMPANY_UPDATE', `Suppression de la société de livraison ${id}`, id);
   };
 
   const updateWilayaDeliveryPrice = (companyId: string, wilayaCode: number, homePrice: number, deskPrice: number, isSupported: boolean) => {
-    setDeliveryCompanies(prev =>
-      prev.map(c => {
+    setDeliveryCompanies(prev => {
+      const next = prev.map(c => {
         if (c.id === companyId) {
           return {
             ...c,
@@ -671,14 +741,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           };
         }
         return c;
-      })
-    );
+      });
+      persistStoreKey('deliveryCompanies', next, true);
+      return next;
+    });
   };
 
   const toggleWilayaActive = (wilayaCode: number) => {
-    setWilayas(prev =>
-      prev.map(w => (w.code === wilayaCode ? { ...w, isActive: !w.isActive } : w))
-    );
+    setWilayas(prev => {
+      const next = prev.map(w => (w.code === wilayaCode ? { ...w, isActive: !w.isActive } : w));
+      persistStoreKey('wilayas', next, true);
+      return next;
+    });
   };
 
   // Employee Management
@@ -688,19 +762,29 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       id: 'emp-' + Date.now().toString(36),
       createdAt: new Date().toISOString()
     };
-    setEmployees(prev => [...prev, newEmp]);
+    setEmployees(prev => {
+      const next = [...prev, newEmp];
+      persistStoreKey('employees', next, true);
+      return next;
+    });
     logActivity('EMPLOYEE_UPDATE', `Création du compte employé ${newEmp.name} (${newEmp.role})`, newEmp.id);
   };
 
   const updateEmployee = (id: string, updated: Partial<Employee>) => {
-    setEmployees(prev =>
-      prev.map(e => (e.id === id ? { ...e, ...updated } : e))
-    );
+    setEmployees(prev => {
+      const next = prev.map(e => (e.id === id ? { ...e, ...updated } : e));
+      persistStoreKey('employees', next, true);
+      return next;
+    });
     logActivity('EMPLOYEE_UPDATE', `Modification du compte employé ${id}`, id);
   };
 
   const deleteEmployee = (id: string) => {
-    setEmployees(prev => prev.filter(e => e.id !== id));
+    setEmployees(prev => {
+      const next = prev.filter(e => e.id !== id);
+      persistStoreKey('employees', next, true);
+      return next;
+    });
     logActivity('EMPLOYEE_UPDATE', `Suppression du compte employé ${id}`, id);
   };
 
@@ -734,7 +818,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       dataJson
     };
 
-    setBackups(prev => [newBackup, ...prev]);
+    setBackups(prev => {
+      const next = [newBackup, ...prev.slice(0, 9)];
+      idbSet('backups', next);
+      return next;
+    });
     logActivity('BACKUP_CREATE', `Sauvegarde de base de données générée (${hash})`, newBackup.id);
     return newBackup;
   };
@@ -751,6 +839,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (parsed.inventoryMovements) setInventoryMovements(parsed.inventoryMovements);
         if (parsed.settings) setSettings(parsed.settings);
 
+        persistStoreBatch({
+          products: parsed.products,
+          orders: parsed.orders,
+          wilayas: parsed.wilayas,
+          deliveryCompanies: parsed.deliveryCompanies,
+          employees: parsed.employees,
+          inventoryMovements: parsed.inventoryMovements,
+          settings: parsed.settings,
+        });
+
         logActivity('BACKUP_RESTORE', 'Restauration complète de la base de données réussie');
         return true;
       }
@@ -761,7 +859,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateSettings = (newSettings: Partial<StoreSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    setSettings(prev => {
+      const next = { ...prev, ...newSettings };
+      persistStoreKey('settings', next, true);
+      return next;
+    });
     logActivity('THEME_CHANGE', 'Mise à jour des paramètres de la boutique');
   };
 
@@ -770,6 +872,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setWilayas(INITIAL_69_WILAYAS);
     setDeliveryCompanies(INITIAL_DELIVERY_COMPANIES);
     setEmployees(INITIAL_EMPLOYEES);
+    persistStoreBatch({
+      products: INITIAL_PRODUCTS,
+      wilayas: INITIAL_69_WILAYAS,
+      deliveryCompanies: INITIAL_DELIVERY_COMPANIES,
+      employees: INITIAL_EMPLOYEES,
+    });
     logActivity('PRODUCT_UPDATE', 'Réinitialisation complète du catalogue et données de démonstration');
   };
 
