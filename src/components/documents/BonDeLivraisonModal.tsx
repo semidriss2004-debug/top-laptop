@@ -61,10 +61,10 @@ export const BonDeLivraisonModal: React.FC<BonDeLivraisonModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-md print:p-0 print:bg-white">
+    <div className="printable-modal-root fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-md print:static print:inset-auto print:p-0 print:bg-white print:overflow-visible">
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-4xl bg-white text-slate-900 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xl overflow-hidden my-auto max-h-[92dvh] flex flex-col print:max-h-none print:m-0 print:border-none print:shadow-none print:rounded-none"
+        className="printable-slip-card relative w-full max-w-4xl bg-white text-slate-900 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xl overflow-hidden my-auto max-h-[92dvh] flex flex-col print:max-h-none print:m-0 print:border-none print:shadow-none print:rounded-none print:overflow-visible"
       >
         {/* Top Action Toolbar (Hidden during print) */}
         <div className="p-3 sm:p-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2 print:hidden">

@@ -67,10 +67,10 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({ 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-md">
+    <div className="printable-modal-root fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-md print:static print:inset-auto print:p-0 print:bg-transparent print:overflow-visible">
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-xl bg-[#091122] rounded-3xl border border-emerald-500/40 shadow-[0_0_60px_rgba(16,185,129,0.25)] overflow-hidden my-auto max-h-[92vh] flex flex-col p-6 sm:p-8"
+        className="printable-slip-card relative w-full max-w-xl bg-[#091122] rounded-3xl border border-emerald-500/40 shadow-[0_0_60px_rgba(16,185,129,0.25)] overflow-hidden my-auto max-h-[92vh] flex flex-col p-6 sm:p-8 print:max-h-none print:my-0 print:shadow-none print:overflow-visible"
       >
         {/* Top Success Badge */}
         <div className="text-center space-y-3 pb-6 border-b border-blue-900/40">
@@ -93,7 +93,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({ 
         </div>
 
         {/* Order Slip Summary */}
-        <div className="py-5 overflow-y-auto space-y-4">
+        <div className="py-5 overflow-y-auto space-y-4 print:overflow-visible">
           <div className="bg-[#050A14] p-4 rounded-2xl border border-blue-900/40 space-y-2 text-xs">
             <div className="flex items-center justify-between pb-2 border-b border-blue-900/30">
               <span className="flex items-center gap-1.5 text-slate-400">
@@ -156,7 +156,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({ 
         </div>
 
         {/* Action Buttons */}
-        <div className="space-y-3 pt-3 border-t border-blue-900/40">
+        <div className="space-y-3 pt-3 border-t border-blue-900/40 print:hidden">
           <button
             onClick={handleSendWhatsAppSlip}
             className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-extrabold text-sm shadow-[0_0_20px_rgba(16,185,129,0.4)] flex items-center justify-center gap-2 cursor-pointer transition-all transform active:scale-98"
