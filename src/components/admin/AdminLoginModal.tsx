@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { ShieldCheck, Lock, X, AlertCircle, KeyRound } from 'lucide-react';
+import { ShieldCheck, Lock, X, AlertCircle } from 'lucide-react';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -71,31 +71,12 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                 type="password"
                 required
                 autoFocus
+                autoComplete="current-password"
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
                 placeholder="Code d'accès employé"
                 className="w-full bg-[#050A14] text-white text-sm rounded-xl ps-10 pe-4 py-3 border border-blue-900/60 focus:border-cyan-400 focus:outline-none"
               />
-            </div>
-            
-            {/* Quick demo roles hint */}
-            <div className="text-[10px] text-slate-400 bg-[#050A14] p-2.5 rounded-xl border border-blue-900/30 space-y-1 mt-2">
-              <div className="text-cyan-300 font-bold flex items-center gap-1">
-                <KeyRound className="w-3 h-3" />
-                <span>Codes d'accès configurés :</span>
-              </div>
-              <div className="flex justify-between font-mono">
-                <span>Directeur (Super Admin) :</span>
-                <strong className="text-white">toplaptop2026</strong>
-              </div>
-              <div className="flex justify-between font-mono">
-                <span>Comptable (Bénéfices/Coûts) :</span>
-                <strong className="text-white">finance2026</strong>
-              </div>
-              <div className="flex justify-between font-mono">
-                <span>Expéditions (69 Wilayas) :</span>
-                <strong className="text-white">delivery2026</strong>
-              </div>
             </div>
           </div>
 
