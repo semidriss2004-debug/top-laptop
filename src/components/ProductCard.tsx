@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
 import { useStore } from '../context/StoreContext';
 import { buildWhatsAppUrl } from '../utils/contactLinks';
+import { trackContact } from '../utils/metaPixel';
 import { 
   Cpu, 
   HardDrive, 
@@ -41,6 +42,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect, onO
 
   const handleQuickWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation();
+    trackContact('whatsapp', product.name);
     const message = language === 'ar'
       ? `السلام عليكم، أود طلب أو الاستفسار عن: ${product.name} (SKU: ${product.sku}) بسعر ${formatPrice(product.priceDZD)}`
       : `Bonjour ${settings.storeName || 'TOP LAPTOP'}, je souhaite commander ou avoir des détails sur : ${product.name} (SKU: ${product.sku}) - ${formatPrice(product.priceDZD)}`;

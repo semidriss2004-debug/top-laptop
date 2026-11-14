@@ -1,5 +1,6 @@
 import React from 'react';
 import { buildWhatsAppUrl, normalizeExternalUrl } from '../utils/contactLinks';
+import { trackContact } from '../utils/metaPixel';
 
 interface SocialIconsProps {
   socialLinks: {
@@ -117,6 +118,11 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
         <a
           key={item.key}
           href={item.url}
+          onClick={() => {
+            if (item.key === 'whatsapp') {
+              trackContact('whatsapp', 'Social WhatsApp Icon');
+            }
+          }}
           target="_blank"
           rel="noopener noreferrer"
           title={item.title}

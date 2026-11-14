@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, CartItem } from '../types';
+import { trackAddToCart } from '../utils/metaPixel';
 
 interface CartContextType {
   items: CartItem[];
@@ -36,6 +37,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [items]);
 
   const addToCart = (product: Product, quantity = 1) => {
+    trackAddToCart(product, quantity);
     setItems(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {

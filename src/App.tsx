@@ -16,6 +16,7 @@ import { AdminLoginModal } from './components/admin/AdminLoginModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { Footer } from './components/Footer';
 import { Product, Order } from './types';
+import { trackPageView } from './utils/metaPixel';
 import { 
   Laptop, 
   Frown, 
@@ -67,6 +68,15 @@ const StorefrontContent: React.FC = () => {
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [isAdminViewOpen, setIsAdminViewOpen] = useState(false);
+
+  const isFirstRenderRef = useRef(true);
+  useEffect(() => {
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return;
+    }
+    trackPageView();
+  }, [selectedCategory, selectedCondition, isTrackingOpen, isAdminViewOpen]);
 
   const catalogRef = useRef<HTMLDivElement>(null);
 

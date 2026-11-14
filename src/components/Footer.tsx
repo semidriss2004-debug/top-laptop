@@ -5,6 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useStore } from '../context/StoreContext';
 import { useTheme } from '../context/ThemeContext';
 import { buildTelUrl, buildWhatsAppUrl } from '../utils/contactLinks';
+import { trackContact } from '../utils/metaPixel';
 import { 
   Phone, 
   Mail, 
@@ -137,6 +138,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <Phone className="w-4 h-4 text-blue-400 flex-shrink-0" />
                 <a
                   href={buildTelUrl(settings.contactPhone || settings.whatsappNumber)}
+                  onClick={() => trackContact('phone', settings.contactPhone || settings.whatsappNumber)}
                   className="font-mono hover:text-cyan-300 transition-colors"
                   dir="ltr"
                 >
@@ -147,6 +149,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <Mail className="w-4 h-4 text-indigo-400 flex-shrink-0" />
                 <a
                   href={`mailto:${settings.contactEmail}`}
+                  onClick={() => trackContact('email', settings.contactEmail)}
                   className="hover:text-cyan-300 transition-colors"
                 >
                   {settings.contactEmail}
@@ -156,6 +159,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <MessageCircle className="w-4 h-4 flex-shrink-0" />
                 <a
                   href={buildWhatsAppUrl(settings.whatsappNumber || settings.contactPhone)}
+                  onClick={() => trackContact('whatsapp', settings.whatsappNumber || settings.contactPhone)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-green-300 transition-colors font-mono"

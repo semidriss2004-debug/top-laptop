@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Product } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useCart } from '../context/CartContext';
 import { useStore } from '../context/StoreContext';
 import { useTheme } from '../context/ThemeContext';
 import { buildWhatsAppUrl } from '../utils/contactLinks';
+import { trackViewContent, trackContact } from '../utils/metaPixel';
 import { 
   X, 
   ShoppingCart, 
@@ -40,12 +41,21 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, on
   const [quantity, setQuantity] = useState(1);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  useEffect(() => {
+    if (product) {
+      setSelectedImageIndex(0);
+      setQuantity(1);
+      trackViewContent(product);
+    }
+  }, [product]);
+
   if (!product) return null;
 
   const isItemInCart = items.some(i => i.product.id === product.id);
   const formatPrice = (price: number) => price.toLocaleString('fr-DZ') + ' ' + t('dzd');
 
   const handleWhatsAppOrder = () => {
+    trackContact('whatsapp', product.name);
     const message = language === 'ar'
       ? `مرحباً ${settings.storeName || 'TOP LAPTOP'}، أود طلب الجهاز التالي مباشرة:\n• الجهاز: ${product.name} (SKU: ${product.sku})\n• السعر: ${formatPrice(product.priceDZD)}\n• الكمية: ${quantity}`
       : `Bonjour ${settings.storeName || 'TOP LAPTOP'}, je souhaite commander directement cet article :\n• Modèle : ${product.name} (SKU: ${product.sku})\n• Prix : ${formatPrice(product.priceDZD)}\n• Quantité : ${quantity}`;

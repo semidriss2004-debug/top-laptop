@@ -3,6 +3,7 @@ import { Order } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useStore } from '../context/StoreContext';
 import { buildWhatsAppUrl } from '../utils/contactLinks';
+import { trackContact } from '../utils/metaPixel';
 import { 
   CheckCircle2, 
   MessageCircle, 
@@ -29,6 +30,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({ 
   const formatPrice = (price: number) => price.toLocaleString('fr-DZ') + ' ' + t('dzd');
 
   const handleSendWhatsAppSlip = () => {
+    trackContact('whatsapp', `Order ${order.id}`);
     const itemsList = order.items
       .map(i => `• ${i.name} (x${i.quantity}) - ${formatPrice(i.priceDZD * i.quantity)}`)
       .join('\n');

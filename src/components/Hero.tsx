@@ -3,6 +3,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useStore } from '../context/StoreContext';
 import { Product } from '../types';
 import { buildWhatsAppUrl } from '../utils/contactLinks';
+import { trackContact } from '../utils/metaPixel';
 import { 
   Cpu, 
   Truck, 
@@ -61,6 +62,7 @@ export const Hero: React.FC<HeroProps> = ({
   const featured = featuredProducts[activeIndex] || products[0];
 
   const handleWhatsAppClick = () => {
+    trackContact('whatsapp', 'Hero WhatsApp Button');
     const message = language === 'ar'
       ? `السلام عليكم، أرغب في الاستفسار عن الأجهزة المتوفرة في ${settings.storeName || 'TOP LAPTOP'}.`
       : `Bonjour ${settings.storeName || 'TOP LAPTOP'}, je souhaite me renseigner sur les ordinateurs portables disponibles.`;

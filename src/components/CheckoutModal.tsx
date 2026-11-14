@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useStore } from '../context/StoreContext';
 import { Order, PaymentMethod, DeliveryMethod } from '../types';
+import { trackInitiateCheckout, trackPurchase } from '../utils/metaPixel';
 import { 
   X, 
   Truck, 
@@ -93,6 +94,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (!pricing) return deliveryMethod === 'home' ? 800 : 500;
     return deliveryMethod === 'home' ? pricing.homePriceDZD : pricing.stopDeskPriceDZD;
   }, [activeCompany, selectedWilayaCode, deliveryMethod]);
+
+  useEffect(() => {
+    if (isOpen && items.length > 0) {
+      const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
+      const ids = items.map((i) => i.product.id);
+      trackInitiateCheckout(subtotalDZD + deliveryFee, totalItems, ids);
+    }
+  }, [isOpen]);
 
   // IMPORTANT: Early return MUST be placed after all React Hooks (useState / useMemo)
   if (!isOpen) return null;
@@ -192,6 +201,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         notes: notes.trim()
       });
 
+      trackPurchase(newOrder);
       clearCart();
       setIsSubmitting(false);
       onClose();

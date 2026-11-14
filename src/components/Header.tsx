@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
 import { useStore } from '../context/StoreContext';
 import { buildTelUrl, buildWhatsAppUrl } from '../utils/contactLinks';
+import { trackContact } from '../utils/metaPixel';
 import { 
   ShoppingCart, 
   Search, 
@@ -93,6 +94,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Direct Call Link (tel:) */}
             <a
               href={telHref}
+              onClick={() => trackContact('phone', displayPhone)}
               className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 transition-colors font-mono"
               title={language === 'ar' ? 'اتصل بنا مباشرة' : 'Appelez-nous directement'}
             >
@@ -105,6 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Direct WhatsApp Link */}
             <a
               href={whatsappHref}
+              onClick={() => trackContact('whatsapp', displayPhone)}
               target="_blank"
               rel="noopener noreferrer"
               className="hidden sm:flex items-center gap-1 text-green-400 hover:text-green-300 transition-colors"
@@ -417,6 +420,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
             <a
               href={telHref}
+              onClick={() => trackContact('phone', displayPhone)}
               className="p-2.5 rounded-xl bg-emerald-950/50 text-emerald-300 border border-emerald-500/40 text-center font-bold flex items-center justify-center gap-1.5 font-mono"
             >
               <Phone className="w-3.5 h-3.5" />
@@ -424,6 +428,7 @@ export const Header: React.FC<HeaderProps> = ({
             </a>
             <a
               href={whatsappHref}
+              onClick={() => trackContact('whatsapp', displayPhone)}
               target="_blank"
               rel="noopener noreferrer"
               className="p-2.5 rounded-xl bg-green-950/50 text-green-300 border border-green-500/40 text-center font-bold flex items-center justify-center gap-1.5"
