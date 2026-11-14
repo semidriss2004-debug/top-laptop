@@ -20,6 +20,11 @@ function isAllowedKey(key: string): key is AllowedKey {
   return (ALLOWED_KEYS as readonly string[]).includes(key);
 }
 
+interface TimestampedEnvelope {
+  updatedAt: number;
+  value: unknown;
+}
+
 export default async (req: Request, _context: Context) => {
   const headers = {
     "Content-Type": "application/json",
@@ -30,34 +35,25 @@ export default async (req: Request, _context: Context) => {
     const store = getStore({ name: STORE_NAME, consistency: "strong" });
 
     if (req.method === "GET") {
-      const url = new URL(req.url);
-      const singleKey = url.searchParams.get("key");
-
-      if (singleKey) {
-        if (!isAllowedKey(singleKey)) {
-          return new Response(
-            JSON.stringify({ ok: false, error: `Invalid key: ${singleKey}` }),
-            { status: 400, headers }
-          );
-        }
-        const value = await store.get(singleKey, { type: "json", consistency: "strong" });
-        return new Response(
-          JSON.stringify({ ok: true, key: singleKey, value }),
-          { status: 200, headers }
-        );
-      }
-
       const entries = await Promise.all(
         ALLOWED_KEYS.map(async (k) => {
-          const val = await store.get(k, { type: "json", consistency: "strong" });
-          return [k, val] as const;
+          const raw = await store.get(k, { type: "json", consistency: "strong" });
+          return [k, raw] as const;
         })
       );
 
-      const data: Record<string, unknown> = {};
-      for (const [k, val] of entries) {
-        if (val !== null && val !== undefined) {
-          data[k] = val;
+      const data: Record<string, TimestampedEnvelope> = {};
+      for (const [k, raw] of entries) {
+        if (raw !== null && raw !== undefined) {
+          if (
+            typeof raw === "object" &&
+            "updatedAt" in (raw as Record<string, unknown>) &&
+            "value" in (raw as Record<string, unknown>)
+          ) {
+            data[k] = raw as TimestampedEnvelope;
+          } else {
+            data[k] = { updatedAt: 1, value: raw };
+          }
         }
       }
 
@@ -71,12 +67,18 @@ export default async (req: Request, _context: Context) => {
       const body = await req.json();
 
       if (body && typeof body.key === "string" && isAllowedKey(body.key)) {
-        await store.setJSON(body.key, body.value);
+        const updatedAt =
+          typeof body.updatedAt === "number" ? body.updatedAt : Date.now();
+        const envelope: TimestampedEnvelope = {
+          updatedAt,
+          value: body.value,
+        };
+        await store.setJSON(body.key, envelope);
         return new Response(
           JSON.stringify({
             ok: true,
             key: body.key,
-            updatedAt: new Date().toISOString(),
+            updatedAt,
           }),
           { status: 200, headers }
         );
@@ -84,16 +86,24 @@ export default async (req: Request, _context: Context) => {
 
       if (body && body.batch && typeof body.batch === "object") {
         const updates: Promise<unknown>[] = [];
-        for (const [k, v] of Object.entries(body.batch)) {
-          if (isAllowedKey(k) && v !== undefined) {
-            updates.push(store.setJSON(k, v));
+        const now = Date.now();
+        for (const [k, item] of Object.entries(body.batch)) {
+          if (isAllowedKey(k) && item !== undefined && item !== null) {
+            const isEnvelope =
+              typeof item === "object" &&
+              "updatedAt" in (item as Record<string, unknown>) &&
+              "value" in (item as Record<string, unknown>);
+            const envelope: TimestampedEnvelope = isEnvelope
+              ? (item as TimestampedEnvelope)
+              : { updatedAt: now, value: item };
+            updates.push(store.setJSON(k, envelope));
           }
         }
         await Promise.all(updates);
         return new Response(
           JSON.stringify({
             ok: true,
-            updatedAt: new Date().toISOString(),
+            updatedAt: now,
           }),
           { status: 200, headers }
         );
