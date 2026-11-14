@@ -1,4 +1,5 @@
 import React from 'react';
+import { buildWhatsAppUrl, normalizeExternalUrl } from '../utils/contactLinks';
 
 interface SocialIconsProps {
   socialLinks: {
@@ -33,7 +34,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
   const items = [
     {
       key: 'facebook',
-      url: socialLinks.facebook,
+      url: normalizeExternalUrl(socialLinks.facebook),
       title: 'Facebook',
       bgHover: 'hover:bg-[#1877F2] hover:border-[#1877F2]',
       color: 'text-[#1877F2] group-hover:text-white',
@@ -45,7 +46,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
     },
     {
       key: 'instagram',
-      url: socialLinks.instagram,
+      url: normalizeExternalUrl(socialLinks.instagram),
       title: 'Instagram',
       bgHover: 'hover:bg-gradient-to-tr hover:from-[#F58529] hover:via-[#DD2A7B] hover:to-[#8134AF] hover:border-pink-500',
       color: 'text-[#E4405F] group-hover:text-white',
@@ -57,7 +58,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
     },
     {
       key: 'tiktok',
-      url: socialLinks.tiktok,
+      url: normalizeExternalUrl(socialLinks.tiktok),
       title: 'TikTok',
       bgHover: 'hover:bg-black hover:border-slate-400',
       color: 'text-slate-200 group-hover:text-white',
@@ -69,7 +70,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
     },
     {
       key: 'youtube',
-      url: socialLinks.youtube,
+      url: normalizeExternalUrl(socialLinks.youtube),
       title: 'YouTube',
       bgHover: 'hover:bg-[#FF0000] hover:border-[#FF0000]',
       color: 'text-[#FF0000] group-hover:text-white',
@@ -81,7 +82,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
     },
     {
       key: 'linkedin',
-      url: socialLinks.linkedin,
+      url: normalizeExternalUrl(socialLinks.linkedin),
       title: 'LinkedIn',
       bgHover: 'hover:bg-[#0A66C2] hover:border-[#0A66C2]',
       color: 'text-[#0A66C2] group-hover:text-white',
@@ -93,7 +94,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
     },
     {
       key: 'whatsapp',
-      url: socialLinks.whatsapp ? (socialLinks.whatsapp.startsWith('http') ? socialLinks.whatsapp : `https://wa.me/${socialLinks.whatsapp.replace(/[^0-9]/g, '')}`) : undefined,
+      url: socialLinks.whatsapp && socialLinks.whatsapp.trim() ? buildWhatsAppUrl(socialLinks.whatsapp) : undefined,
       title: 'WhatsApp',
       bgHover: 'hover:bg-[#25D366] hover:border-[#25D366]',
       color: 'text-[#25D366] group-hover:text-white',

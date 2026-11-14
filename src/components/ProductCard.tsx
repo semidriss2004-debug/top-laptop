@@ -4,6 +4,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
 import { useStore } from '../context/StoreContext';
+import { buildWhatsAppUrl } from '../utils/contactLinks';
 import { 
   Cpu, 
   HardDrive, 
@@ -40,11 +41,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect, onO
 
   const handleQuickWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const phone = (settings.whatsappNumber || '213555123456').replace(/[^0-9]/g, '');
     const message = language === 'ar'
       ? `السلام عليكم، أود طلب أو الاستفسار عن: ${product.name} (SKU: ${product.sku}) بسعر ${formatPrice(product.priceDZD)}`
-      : `Bonjour TOP LAPTOP, je souhaite commander ou avoir des détails sur : ${product.name} (SKU: ${product.sku}) - ${formatPrice(product.priceDZD)}`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+      : `Bonjour ${settings.storeName || 'TOP LAPTOP'}, je souhaite commander ou avoir des détails sur : ${product.name} (SKU: ${product.sku}) - ${formatPrice(product.priceDZD)}`;
+    window.open(buildWhatsAppUrl(settings.whatsappNumber || settings.contactPhone, message), '_blank');
   };
 
   const handleAddToCart = (e: React.MouseEvent) => {

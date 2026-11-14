@@ -2,6 +2,7 @@
 import { Order } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useStore } from '../context/StoreContext';
+import { buildWhatsAppUrl } from '../utils/contactLinks';
 import { 
   CheckCircle2, 
   MessageCircle, 
@@ -28,13 +29,12 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({ 
   const formatPrice = (price: number) => price.toLocaleString('fr-DZ') + ' ' + t('dzd');
 
   const handleSendWhatsAppSlip = () => {
-    const cleanNumber = settings.whatsappNumber.replace(/[^0-9]/g, '');
     const itemsList = order.items
       .map(i => `• ${i.name} (x${i.quantity}) - ${formatPrice(i.priceDZD * i.quantity)}`)
       .join('\n');
 
     const message = language === 'ar'
-      ? `*طلب جديد من TOP LAPTOP الجزائر*\n` +
+      ? `*طلب جديد من ${settings.storeName || 'TOP LAPTOP الجزائر'}*\n` +
         `--------------------------------\n` +
         `*رقم الطلب:* ${order.id}\n` +
         `*الاسم:* ${order.customerName}\n` +
@@ -46,7 +46,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({ 
         `*مصاريف الشحن (69 ولاية):* ${formatPrice(order.deliveryFeeDZD)}\n` +
         `*المجموع الكلي:* ${formatPrice(order.totalDZD)}\n` +
         `*طريقة الدفع:* ${order.paymentMethod === 'cod' ? 'الدفع عند الاستلام' : 'واتساب مباشر'}`
-      : `*NOUVELLE COMMANDE - TOP LAPTOP ALGERIE*\n` +
+      : `*NOUVELLE COMMANDE - ${settings.storeName || 'TOP LAPTOP ALGERIE'}*\n` +
         `--------------------------------\n` +
         `*Référence :* ${order.id}\n` +
         `*Client :* ${order.customerName}\n` +
@@ -59,7 +59,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({ 
         `*Total à régler :* ${formatPrice(order.totalDZD)}\n` +
         `*Paiement :* ${order.paymentMethod === 'cod' ? 'Cash à la livraison (COD)' : 'Confirmation WhatsApp'}`;
 
-    window.open(`https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`, '_blank');
+    window.open(buildWhatsAppUrl(settings.whatsappNumber || settings.contactPhone, message), '_blank');
   };
 
   const handlePrint = () => {

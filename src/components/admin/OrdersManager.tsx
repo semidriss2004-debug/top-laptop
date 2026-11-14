@@ -3,6 +3,7 @@ import { Order, OrderStatus } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { BonDeLivraisonModal } from '../documents/BonDeLivraisonModal';
+import { buildTelUrl, buildWhatsAppUrl } from '../../utils/contactLinks';
 import { 
   Search, 
   Phone, 
@@ -69,12 +70,10 @@ export const OrdersManager: React.FC = () => {
   };
 
   const handleWhatsAppContact = (order: Order) => {
-    const cleanPhone = order.customerPhone.replace(/[^0-9]/g, '');
-    const intlPhone = cleanPhone.startsWith('0') ? '213' + cleanPhone.substring(1) : cleanPhone;
     const msg = language === 'ar'
       ? `مرحباً ${order.customerName}، نتصل بكم من TOP LAPTOP بخصوص طلبيتكم رقم (${order.id}) إلى ولاية ${order.wilaya.nameAr}.`
       : `Bonjour ${order.customerName}, nous vous contactons depuis TOP LAPTOP concernant votre commande ${order.id} vers ${order.wilaya.nameFr}.`;
-    window.open(`https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+    window.open(buildWhatsAppUrl(order.customerPhone, msg), '_blank');
   };
 
   return (
@@ -150,10 +149,15 @@ export const OrdersManager: React.FC = () => {
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
-                        <span className="flex items-center gap-1 font-mono">
+                        <a
+                          href={buildTelUrl(order.customerPhone)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 font-mono hover:text-cyan-300 transition-colors"
+                          dir="ltr"
+                        >
                           <Phone className="w-3 h-3 text-cyan-400" />
                           <span>{order.customerPhone}</span>
-                        </span>
+                        </a>
                         <span>•</span>
                         <span className="text-slate-400">
                           {order.deliveryCompanyName || 'Yalidine'} ({order.deliveryMethod === 'home' ? 'Domicile' : 'Stop Desk'})

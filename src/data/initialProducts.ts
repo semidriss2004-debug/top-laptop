@@ -414,8 +414,8 @@ export const INITIAL_PRODUCTS: Product[] = [
 export const INITIAL_SETTINGS = {
   storeName: 'TOP LAPTOP ALGERIE',
   flatDeliveryFeeDZD: 800,
-  whatsappNumber: '+213555123456',
-  contactPhone: '0555 12 34 56 / 0770 98 76 54',
+  whatsappNumber: '0557526420',
+  contactPhone: '0557526420',
   contactEmail: 'contact@toplaptop-dz.com',
   storeAddress: '15 Rue Didouche Mourad, Alger Centre, Alger, Algérie',
   taxNumberNIF: '001916012345678',
@@ -426,7 +426,7 @@ export const INITIAL_SETTINGS = {
     tiktok: 'https://tiktok.com/@toplaptop.dz',
     youtube: 'https://youtube.com/@toplaptopdz',
     linkedin: 'https://linkedin.com/company/top-laptop-dz',
-    whatsapp: 'https://wa.me/213555123456'
+    whatsapp: 'https://wa.me/213557526420'
   },
   themeSettings: {
     activeThemeId: 'cyber-neon' as const,

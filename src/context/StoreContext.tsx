@@ -25,6 +25,61 @@ import {
   idbSet,
   safeLocalStorageSet,
 } from '../services/storage';
+import {
+  isLegacyDemoPhone,
+  buildWhatsAppUrl,
+  OFFICIAL_PHONE_LOCAL,
+} from '../utils/contactLinks';
+
+function normalizeStoreSettings(raw?: Partial<StoreSettings> | null): {
+  normalized: StoreSettings;
+  migratedLegacyPhone: boolean;
+} {
+  if (!raw || typeof raw !== 'object') {
+    return { normalized: INITIAL_SETTINGS, migratedLegacyPhone: false };
+  }
+
+  const rawWhatsapp = raw.whatsappNumber?.trim();
+  const rawContactPhone = raw.contactPhone?.trim();
+
+  const legacyWhatsapp = isLegacyDemoPhone(rawWhatsapp);
+  const legacyContact = isLegacyDemoPhone(rawContactPhone);
+
+  const whatsappNumber = legacyWhatsapp
+    ? !legacyContact && rawContactPhone
+      ? rawContactPhone
+      : OFFICIAL_PHONE_LOCAL
+    : rawWhatsapp!;
+
+  const contactPhone = legacyContact
+    ? !legacyWhatsapp && rawWhatsapp
+      ? rawWhatsapp
+      : OFFICIAL_PHONE_LOCAL
+    : rawContactPhone!;
+
+  const mergedSocial = {
+    ...INITIAL_SETTINGS.socialLinks,
+    ...(raw.socialLinks || {}),
+  };
+
+  // Always keep socialLinks.whatsapp synchronized with the active whatsappNumber
+  mergedSocial.whatsapp = buildWhatsAppUrl(whatsappNumber);
+
+  const normalized: StoreSettings = {
+    ...INITIAL_SETTINGS,
+    ...raw,
+    whatsappNumber,
+    contactPhone,
+    socialLinks: mergedSocial,
+  };
+
+  const migratedLegacyPhone =
+    (Boolean(rawWhatsapp) && legacyWhatsapp) ||
+    (Boolean(rawContactPhone) && legacyContact) ||
+    isLegacyDemoPhone(raw.socialLinks?.whatsapp);
+
+  return { normalized, migratedLegacyPhone };
+}
 
 interface StoreContextType {
   products: Product[];
@@ -309,7 +364,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
-          return { ...INITIAL_SETTINGS, ...parsed, socialLinks: { ...INITIAL_SETTINGS.socialLinks, ...(parsed.socialLinks || {}) } };
+          const { normalized, migratedLegacyPhone } = normalizeStoreSettings(parsed);
+          if (migratedLegacyPhone) {
+            safeLocalStorageSet('top_laptop_settings_v2', normalized);
+          }
+          return normalized;
         }
       }
     } catch (e) {
@@ -318,44 +377,61 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return INITIAL_SETTINGS;
   });
 
-  // Hydrate from Netlify Cloud Blobs & IndexedDB on startup
+  // Keep browser document title synced with storeName
+  useEffect(() => {
+    if (typeof document !== 'undefined' && settings.storeName) {
+      document.title = `${settings.storeName} — Premier Computer & Tech Store in Algeria`;
+    }
+  }, [settings.storeName]);
+
+  // Hydrate from Netlify Cloud Blobs & IndexedDB on startup & window focus
   useEffect(() => {
     let isMounted = true;
 
-    fetchAllCloudAndLocalState().then((remote) => {
-      if (!isMounted) return;
-      if (Array.isArray(remote.products)) {
-        setProducts(remote.products);
-      }
-      if (remote.settings && typeof remote.settings === 'object') {
-        setSettings({
-          ...INITIAL_SETTINGS,
-          ...remote.settings,
-          socialLinks: {
-            ...INITIAL_SETTINGS.socialLinks,
-            ...(remote.settings.socialLinks || {})
+    const runHydration = () => {
+      fetchAllCloudAndLocalState().then((remote) => {
+        if (!isMounted) return;
+        if (Array.isArray(remote.products)) {
+          setProducts(remote.products);
+        }
+        if (remote.settings && typeof remote.settings === 'object') {
+          const { normalized, migratedLegacyPhone } = normalizeStoreSettings(remote.settings);
+          setSettings(normalized);
+          if (migratedLegacyPhone) {
+            persistStoreKey('settings', normalized, true);
           }
-        });
+        }
+        if (Array.isArray(remote.wilayas) && remote.wilayas.length > 0) {
+          setWilayas(remote.wilayas);
+        }
+        if (Array.isArray(remote.deliveryCompanies)) {
+          setDeliveryCompanies(remote.deliveryCompanies);
+        }
+        if (Array.isArray(remote.employees) && remote.employees.length > 0) {
+          setEmployees(remote.employees);
+        }
+        if (Array.isArray(remote.orders)) {
+          setOrders(remote.orders);
+        }
+        if (Array.isArray(remote.inventoryMovements)) {
+          setInventoryMovements(remote.inventoryMovements);
+        }
+        if (Array.isArray(remote.activityLogs)) {
+          setActivityLogs(remote.activityLogs);
+        }
+      });
+    };
+
+    runHydration();
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        runHydration();
       }
-      if (Array.isArray(remote.wilayas) && remote.wilayas.length > 0) {
-        setWilayas(remote.wilayas);
-      }
-      if (Array.isArray(remote.deliveryCompanies)) {
-        setDeliveryCompanies(remote.deliveryCompanies);
-      }
-      if (Array.isArray(remote.employees) && remote.employees.length > 0) {
-        setEmployees(remote.employees);
-      }
-      if (Array.isArray(remote.orders)) {
-        setOrders(remote.orders);
-      }
-      if (Array.isArray(remote.inventoryMovements)) {
-        setInventoryMovements(remote.inventoryMovements);
-      }
-      if (Array.isArray(remote.activityLogs)) {
-        setActivityLogs(remote.activityLogs);
-      }
-    });
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
     idbGet<DatabaseBackup[]>('backups').then((savedBackups) => {
       if (isMounted && Array.isArray(savedBackups)) {
@@ -365,6 +441,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     return () => {
       isMounted = false;
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     };
   }, []);
 
@@ -860,7 +938,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updateSettings = (newSettings: Partial<StoreSettings>) => {
     setSettings(prev => {
-      const next = { ...prev, ...newSettings };
+      const merged = {
+        ...prev,
+        ...newSettings,
+        socialLinks: {
+          ...prev.socialLinks,
+          ...(newSettings.socialLinks || {}),
+        },
+      };
+      const effectiveWhatsapp =
+        merged.whatsappNumber?.trim() || merged.contactPhone?.trim() || OFFICIAL_PHONE_LOCAL;
+      const effectiveContactPhone =
+        merged.contactPhone?.trim() || merged.whatsappNumber?.trim() || OFFICIAL_PHONE_LOCAL;
+
+      const next: StoreSettings = {
+        ...merged,
+        whatsappNumber: effectiveWhatsapp,
+        contactPhone: effectiveContactPhone,
+        socialLinks: {
+          ...merged.socialLinks,
+          whatsapp: buildWhatsAppUrl(effectiveWhatsapp),
+        },
+      };
       persistStoreKey('settings', next, true);
       return next;
     });

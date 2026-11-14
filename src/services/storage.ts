@@ -163,9 +163,13 @@ export function fetchAllCloudAndLocalState(): Promise<Partial<Record<StoreKey, a
 
     // 2. Fetch from Netlify Cloud Blobs (/.netlify/functions/store-data)
     try {
-      const res = await fetch(CLOUD_ENDPOINT, {
+      const res = await fetch(`${CLOUD_ENDPOINT}?t=${Date.now()}`, {
         method: 'GET',
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
         cache: 'no-store',
       });
 
@@ -196,22 +200,25 @@ export function fetchAllCloudAndLocalState(): Promise<Partial<Record<StoreKey, a
               const localTs = effectiveLocalTs[k] || 0;
 
               if (hasCloud && cloudVal !== undefined && cloudVal !== null && cloudTs >= localTs) {
-                // Cloud is newer or equal -> adopt Cloud value
+                // Cloud is newer or equal -> adopt Cloud value on this device (Phone or PC)
                 result[k] = cloudVal;
                 setLocalTimestamp(k, cloudTs);
                 idbTimestamps[k] = cloudTs;
                 await idbSet(k, cloudVal);
                 safeLocalStorageSet(LOCAL_STORAGE_KEY_MAP[k], cloudVal);
-              } else if (result[k] !== undefined && localTs > cloudTs) {
-                // Local has explicit user/admin edits newer than Cloud -> keep Local & push to Cloud
-                newerLocalToPush[k] = { updatedAt: localTs, value: result[k] };
+              } else if (result[k] !== undefined && (localTs > cloudTs || !hasCloud)) {
+                // Local device (e.g. PC) has saved edits newer than Cloud OR Cloud is still empty -> push Local to Cloud
+                const pushTs = localTs > 0 ? localTs : Date.now();
+                setLocalTimestamp(k, pushTs);
+                idbTimestamps[k] = pushTs;
+                newerLocalToPush[k] = { updatedAt: pushTs, value: result[k] };
               }
             }
 
             await idbSet('_timestamps', idbTimestamps);
 
             if (Object.keys(newerLocalToPush).length > 0) {
-              fetch(CLOUD_ENDPOINT, {
+              await fetch(CLOUD_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ batch: newerLocalToPush }),

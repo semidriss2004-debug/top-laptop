@@ -4,6 +4,7 @@ import { SocialIcons } from './SocialIcons';
 import { useLanguage } from '../context/LanguageContext';
 import { useStore } from '../context/StoreContext';
 import { useTheme } from '../context/ThemeContext';
+import { buildTelUrl, buildWhatsAppUrl } from '../utils/contactLinks';
 import { 
   Phone, 
   Mail, 
@@ -45,7 +46,13 @@ export const Footer: React.FC<FooterProps> = ({
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2 font-mono">
                 {language === 'ar' ? 'تابعنا على مواقع التواصل:' : 'Rejoignez notre communauté :'}
               </span>
-              <SocialIcons socialLinks={settings.socialLinks} size="md" />
+              <SocialIcons
+                socialLinks={{
+                  ...settings.socialLinks,
+                  whatsapp: settings.whatsappNumber || settings.socialLinks?.whatsapp,
+                }}
+                size="md"
+              />
             </div>
           </div>
 
@@ -128,15 +135,33 @@ export const Footer: React.FC<FooterProps> = ({
               </div>
               <div className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                <span className="font-mono">{settings.contactPhone}</span>
+                <a
+                  href={buildTelUrl(settings.contactPhone || settings.whatsappNumber)}
+                  className="font-mono hover:text-cyan-300 transition-colors"
+                  dir="ltr"
+                >
+                  {settings.contactPhone || settings.whatsappNumber}
+                </a>
               </div>
               <div className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                <span>{settings.contactEmail}</span>
+                <a
+                  href={`mailto:${settings.contactEmail}`}
+                  className="hover:text-cyan-300 transition-colors"
+                >
+                  {settings.contactEmail}
+                </a>
               </div>
               <div className="flex items-center gap-2.5 text-green-400">
                 <MessageCircle className="w-4 h-4 flex-shrink-0" />
-                <span>WhatsApp: {settings.whatsappNumber}</span>
+                <a
+                  href={buildWhatsAppUrl(settings.whatsappNumber || settings.contactPhone)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-green-300 transition-colors font-mono"
+                >
+                  WhatsApp: <span dir="ltr">{settings.whatsappNumber || settings.contactPhone}</span>
+                </a>
               </div>
               <div className="flex items-center gap-2.5 text-cyan-300">
                 <Truck className="w-4 h-4 flex-shrink-0" />

@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useLanguage } from '../../context/LanguageContext';
+import {
+  buildTelUrl,
+  buildWhatsAppUrl,
+  normalizeExternalUrl,
+  OFFICIAL_PHONE_LOCAL,
+} from '../../utils/contactLinks';
 import { 
   Save, 
   Phone, 
@@ -51,22 +57,25 @@ export const StoreSettingsView: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const nextWhatsapp = whatsapp.trim() || contactPhone.trim() || OFFICIAL_PHONE_LOCAL;
+    const nextContactPhone = contactPhone.trim() || whatsapp.trim() || OFFICIAL_PHONE_LOCAL;
+
     updateSettings({
-      storeName: storeName.trim(),
-      flatDeliveryFeeDZD: Number(flatFee),
-      whatsappNumber: whatsapp.trim(),
-      contactPhone: contactPhone.trim(),
+      storeName: storeName.trim() || 'TOP LAPTOP ALGERIE',
+      flatDeliveryFeeDZD: Number(flatFee) || 800,
+      whatsappNumber: nextWhatsapp,
+      contactPhone: nextContactPhone,
       contactEmail: contactEmail.trim(),
       storeAddress: storeAddress.trim(),
       tradeRegisterRC: rc.trim(),
       taxNumberNIF: nif.trim(),
       socialLinks: {
-        facebook: facebook.trim(),
-        instagram: instagram.trim(),
-        tiktok: tiktok.trim(),
-        youtube: youtube.trim(),
-        linkedin: linkedin.trim(),
-        whatsapp: whatsapp.trim()
+        facebook: normalizeExternalUrl(facebook) || '',
+        instagram: normalizeExternalUrl(instagram) || '',
+        tiktok: normalizeExternalUrl(tiktok) || '',
+        youtube: normalizeExternalUrl(youtube) || '',
+        linkedin: normalizeExternalUrl(linkedin) || '',
+        whatsapp: buildWhatsAppUrl(nextWhatsapp)
       }
     });
 
@@ -138,9 +147,12 @@ export const StoreSettingsView: React.FC = () => {
                 required
                 value={whatsapp}
                 onChange={(e) => setWhatsapp(e.target.value)}
-                placeholder="+213555123456"
+                placeholder="0557526420"
                 className="w-full bg-[#050A14] text-white font-mono rounded-xl px-3 py-2 border border-blue-900/60"
               />
+              <span className="text-[10px] text-emerald-400 font-mono mt-1 block truncate" dir="ltr">
+                Lien actif: {buildWhatsAppUrl(whatsapp || contactPhone)}
+              </span>
             </div>
             <div>
               <label className="text-slate-300 font-bold block mb-1">Téléphone d'appel</label>
@@ -148,8 +160,12 @@ export const StoreSettingsView: React.FC = () => {
                 type="text"
                 value={contactPhone}
                 onChange={(e) => setContactPhone(e.target.value)}
+                placeholder="0557526420"
                 className="w-full bg-[#050A14] text-white font-mono rounded-xl px-3 py-2 border border-blue-900/60"
               />
+              <span className="text-[10px] text-cyan-400 font-mono mt-1 block truncate" dir="ltr">
+                Appel direct: {buildTelUrl(contactPhone || whatsapp)}
+              </span>
             </div>
             <div>
               <label className="text-slate-300 font-bold block mb-1">Email de contact</label>
@@ -188,7 +204,7 @@ export const StoreSettingsView: React.FC = () => {
             <div>
               <label className="text-slate-300 block mb-1">Facebook URL</label>
               <input
-                type="url"
+                type="text"
                 value={facebook}
                 onChange={(e) => setFacebook(e.target.value)}
                 placeholder="https://facebook.com/..."
@@ -198,7 +214,7 @@ export const StoreSettingsView: React.FC = () => {
             <div>
               <label className="text-slate-300 block mb-1">Instagram URL</label>
               <input
-                type="url"
+                type="text"
                 value={instagram}
                 onChange={(e) => setInstagram(e.target.value)}
                 placeholder="https://instagram.com/..."
@@ -208,7 +224,7 @@ export const StoreSettingsView: React.FC = () => {
             <div>
               <label className="text-slate-300 block mb-1">TikTok URL</label>
               <input
-                type="url"
+                type="text"
                 value={tiktok}
                 onChange={(e) => setTiktok(e.target.value)}
                 placeholder="https://tiktok.com/@..."
@@ -218,7 +234,7 @@ export const StoreSettingsView: React.FC = () => {
             <div>
               <label className="text-slate-300 block mb-1">YouTube URL</label>
               <input
-                type="url"
+                type="text"
                 value={youtube}
                 onChange={(e) => setYoutube(e.target.value)}
                 placeholder="https://youtube.com/@..."
@@ -228,7 +244,7 @@ export const StoreSettingsView: React.FC = () => {
             <div>
               <label className="text-slate-300 block mb-1">LinkedIn URL</label>
               <input
-                type="url"
+                type="text"
                 value={linkedin}
                 onChange={(e) => setLinkedin(e.target.value)}
                 placeholder="https://linkedin.com/company/..."

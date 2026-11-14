@@ -4,6 +4,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useCart } from '../context/CartContext';
 import { useStore } from '../context/StoreContext';
 import { useTheme } from '../context/ThemeContext';
+import { buildWhatsAppUrl } from '../utils/contactLinks';
 import { 
   X, 
   ShoppingCart, 
@@ -45,11 +46,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, on
   const formatPrice = (price: number) => price.toLocaleString('fr-DZ') + ' ' + t('dzd');
 
   const handleWhatsAppOrder = () => {
-    const cleanNumber = settings.whatsappNumber.replace(/[^0-9]/g, '');
     const message = language === 'ar'
-      ? `مرحباً TOP LAPTOP، أود طلب الجهاز التالي مباشرة:\n• الجهاز: ${product.name} (SKU: ${product.sku})\n• السعر: ${formatPrice(product.priceDZD)}\n• الكمية: ${quantity}`
-      : `Bonjour TOP LAPTOP, je souhaite commander directement cet article :\n• Modèle : ${product.name} (SKU: ${product.sku})\n• Prix : ${formatPrice(product.priceDZD)}\n• Quantité : ${quantity}`;
-    window.open(`https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`, '_blank');
+      ? `مرحباً ${settings.storeName || 'TOP LAPTOP'}، أود طلب الجهاز التالي مباشرة:\n• الجهاز: ${product.name} (SKU: ${product.sku})\n• السعر: ${formatPrice(product.priceDZD)}\n• الكمية: ${quantity}`
+      : `Bonjour ${settings.storeName || 'TOP LAPTOP'}, je souhaite commander directement cet article :\n• Modèle : ${product.name} (SKU: ${product.sku})\n• Prix : ${formatPrice(product.priceDZD)}\n• Quantité : ${quantity}`;
+    window.open(buildWhatsAppUrl(settings.whatsappNumber || settings.contactPhone, message), '_blank');
   };
 
   const handleAddToCart = () => {

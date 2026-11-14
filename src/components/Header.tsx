@@ -4,6 +4,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
 import { useStore } from '../context/StoreContext';
+import { buildTelUrl, buildWhatsAppUrl } from '../utils/contactLinks';
 import { 
   ShoppingCart, 
   Search, 
@@ -18,7 +19,9 @@ import {
   Key,
   Truck,
   Monitor,
-  Headphones
+  Headphones,
+  Phone,
+  MessageCircle
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -47,8 +50,12 @@ export const Header: React.FC<HeaderProps> = ({
   const { language, toggleLanguage, t } = useLanguage();
   const { totalItemsCount, setIsCartOpen } = useCart();
   const { activeTheme } = useTheme();
-  const { products } = useStore();
+  const { products, settings } = useStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const displayPhone = settings.contactPhone || settings.whatsappNumber || '0557526420';
+  const telHref = buildTelUrl(displayPhone);
+  const whatsappHref = buildWhatsAppUrl(settings.whatsappNumber || displayPhone);
 
   const handlePickCategory = (cat: string, cond?: string) => {
     setSelectedCategory(cat);
@@ -82,7 +89,33 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden lg:inline text-slate-400">{t('slogan')}</span>
           </div>
 
-          <div className="flex items-center gap-2.5 sm:gap-4 text-[11px] sm:text-xs font-semibold flex-shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 text-[11px] sm:text-xs font-semibold flex-shrink-0">
+            {/* Direct Call Link (tel:) */}
+            <a
+              href={telHref}
+              className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 transition-colors font-mono"
+              title={language === 'ar' ? 'اتصل بنا مباشرة' : 'Appelez-nous directement'}
+            >
+              <Phone className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <span dir="ltr">{displayPhone}</span>
+            </a>
+
+            <span className="hidden sm:inline text-slate-600">|</span>
+
+            {/* Direct WhatsApp Link */}
+            <a
+              href={whatsappHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:flex items-center gap-1 text-green-400 hover:text-green-300 transition-colors"
+              title="WhatsApp"
+            >
+              <MessageCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+              <span>WhatsApp</span>
+            </a>
+
+            <span className="text-slate-600">|</span>
+
             {/* Order Tracking Button */}
             <button
               onClick={onOpenTracking}
@@ -92,10 +125,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span>{language === 'ar' ? 'تتبع طلبيتي' : 'Suivre ma commande'}</span>
             </button>
 
-            <span className="hidden sm:inline text-slate-600">|</span>
-            <span className="hidden sm:inline text-blue-400">
-              {language === 'ar' ? '🇩🇿 شحن سريع 69 ولاية' : '🇩🇿 69 Wilayas Express'}
-            </span>
             <span className="text-slate-600">|</span>
 
             {/* Admin Portal Shortcut */}
@@ -386,6 +415,22 @@ export const Header: React.FC<HeaderProps> = ({
             >
               {language === 'ar' ? '🚚 تتبع طلبيتي مباشرة' : '🚚 Suivre ma commande en direct'}
             </button>
+            <a
+              href={telHref}
+              className="p-2.5 rounded-xl bg-emerald-950/50 text-emerald-300 border border-emerald-500/40 text-center font-bold flex items-center justify-center gap-1.5 font-mono"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span dir="ltr">{displayPhone}</span>
+            </a>
+            <a
+              href={whatsappHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2.5 rounded-xl bg-green-950/50 text-green-300 border border-green-500/40 text-center font-bold flex items-center justify-center gap-1.5"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>WhatsApp</span>
+            </a>
           </div>
         </div>
       )}

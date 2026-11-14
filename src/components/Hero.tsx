@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { useStore } from '../context/StoreContext';
 import { Product } from '../types';
+import { buildWhatsAppUrl } from '../utils/contactLinks';
 import { 
   Cpu, 
   Truck, 
@@ -60,11 +61,10 @@ export const Hero: React.FC<HeroProps> = ({
   const featured = featuredProducts[activeIndex] || products[0];
 
   const handleWhatsAppClick = () => {
-    const cleanNumber = (settings.whatsappNumber || '213555123456').replace(/[^0-9]/g, '');
     const message = language === 'ar'
-      ? 'السلام عليكم، أرغب في الاستفسار عن الأجهزة المتوفرة في TOP LAPTOP.'
-      : 'Bonjour TOP LAPTOP, je souhaite me renseigner sur les ordinateurs portables disponibles.';
-    window.open(`https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`, '_blank');
+      ? `السلام عليكم، أرغب في الاستفسار عن الأجهزة المتوفرة في ${settings.storeName || 'TOP LAPTOP'}.`
+      : `Bonjour ${settings.storeName || 'TOP LAPTOP'}, je souhaite me renseigner sur les ordinateurs portables disponibles.`;
+    window.open(buildWhatsAppUrl(settings.whatsappNumber || settings.contactPhone, message), '_blank');
   };
 
   return (
