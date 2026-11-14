@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { StoreProvider, useStore } from './context/StoreContext';
@@ -315,6 +316,7 @@ export default function App() {
         <StoreProvider>
           <CartProvider>
             <StorefrontContent />
+            <SpeedInsights />
           </CartProvider>
         </StoreProvider>
       </LanguageProvider>
