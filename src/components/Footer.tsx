@@ -24,7 +24,7 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenTracking, 
   onSelectCategory 
 }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { settings } = useStore();
   const { activeTheme } = useTheme();
 
@@ -40,10 +40,10 @@ export const Footer: React.FC<FooterProps> = ({
               {t('aboutText')}
             </p>
 
-            {/* Official Social Media SVG Icons (Phase 4) */}
+            {/* Official Social Media SVG Icons */}
             <div className="pt-2">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2 font-mono">
-                Rejoignez notre communauté :
+                {language === 'ar' ? 'تابعنا على مواقع التواصل:' : 'Rejoignez notre communauté :'}
               </span>
               <SocialIcons socialLinks={settings.socialLinks} size="md" />
             </div>
@@ -58,7 +58,7 @@ export const Footer: React.FC<FooterProps> = ({
               <li>
                 <button
                   onClick={() => onSelectCategory('all')}
-                  className="hover:text-cyan-300 transition-colors"
+                  className="hover:text-cyan-300 transition-colors cursor-pointer"
                 >
                   {t('catAll')}
                 </button>
@@ -66,40 +66,48 @@ export const Footer: React.FC<FooterProps> = ({
               <li>
                 <button
                   onClick={() => onSelectCategory('gaming')}
-                  className="hover:text-cyan-300 transition-colors"
+                  className="hover:text-cyan-300 transition-colors cursor-pointer"
                 >
                   {t('catGaming')}
                 </button>
               </li>
               <li>
                 <button
-                  onClick={() => onSelectCategory('software_digital')}
-                  className="hover:text-cyan-300 transition-colors"
+                  onClick={() => onSelectCategory('professional')}
+                  className="hover:text-cyan-300 transition-colors cursor-pointer"
                 >
-                  Logiciels & Licences
+                  {t('catProfessional')}
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onSelectCategory('software_digital')}
+                  className="hover:text-cyan-300 transition-colors cursor-pointer"
+                >
+                  {language === 'ar' ? 'برامج ورخص رقمية' : 'Logiciels & Licences'}
                 </button>
               </li>
               <li>
                 <button
                   onClick={() => onSelectCategory('laptop_bags_cases')}
-                  className="hover:text-cyan-300 transition-colors"
+                  className="hover:text-cyan-300 transition-colors cursor-pointer"
                 >
-                  Sacs & Housses PC
+                  {language === 'ar' ? 'حقائب وحوافظ PC' : 'Sacs & Housses PC'}
                 </button>
               </li>
               <li>
                 <button
                   onClick={onOpenTracking}
-                  className="hover:text-cyan-300 transition-colors text-cyan-400 font-bold flex items-center gap-1"
+                  className="hover:text-cyan-300 transition-colors text-cyan-400 font-bold flex items-center gap-1 cursor-pointer"
                 >
                   <Truck className="w-3.5 h-3.5" />
-                  <span>Suivre ma commande en direct</span>
+                  <span>{language === 'ar' ? 'تتبع طلبيتي مباشرة' : 'Suivre ma commande en direct'}</span>
                 </button>
               </li>
               <li>
                 <button
                   onClick={onOpenAdmin}
-                  className="hover:text-cyan-300 transition-colors text-blue-400 font-medium flex items-center gap-1"
+                  className="hover:text-cyan-300 transition-colors text-blue-400 font-medium flex items-center gap-1 cursor-pointer"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>{t('adminPortal')}</span>
@@ -132,7 +140,11 @@ export const Footer: React.FC<FooterProps> = ({
               </div>
               <div className="flex items-center gap-2.5 text-cyan-300">
                 <Truck className="w-4 h-4 flex-shrink-0" />
-                <span>Couverture des 69 Wilayas d'Algérie (Yalidine, ZR Express)</span>
+                <span>
+                  {language === 'ar'
+                    ? 'توصيل سريع لجميع 69 ولاية في الجزائر (Yalidine, ZR Express)'
+                    : "Couverture des 69 Wilayas d'Algérie (Yalidine, ZR Express)"}
+                </span>
               </div>
             </div>
           </div>
@@ -142,14 +154,14 @@ export const Footer: React.FC<FooterProps> = ({
         {/* Bottom bar */}
         <div className="mt-10 pt-6 border-t border-blue-950/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-500 text-[11px]">
           <div>
-            © 2026 TOP LAPTOP Algérie • RC: {settings.tradeRegisterRC || '16/00-9876543B20'} • NIF: {settings.taxNumberNIF || '001916012345678'}
+            © 2026 {settings.storeName || 'TOP LAPTOP Algérie'} • RC: {settings.tradeRegisterRC || '16/00-9876543B20'} • NIF: {settings.taxNumberNIF || '001916012345678'}
           </div>
           <div className="flex items-center gap-4">
             <span 
               className="px-2.5 py-0.5 rounded-full text-[10px] font-bold"
               style={{ backgroundColor: activeTheme.badgeBg, color: activeTheme.badgeText }}
             >
-              Thème : {activeTheme.nameFr}
+              {language === 'ar' ? `المظهر: ${activeTheme.nameAr}` : `Thème : ${activeTheme.nameFr}`}
             </span>
             <span>•</span>
             <span className="text-cyan-400 font-mono font-bold">BUY • UPGRADE • PERFORM</span>
