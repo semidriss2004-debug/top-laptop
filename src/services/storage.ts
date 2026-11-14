@@ -1,11 +1,12 @@
 // Multi-tier Timestamped Persistent Storage Service:
-// 1. Netlify Blobs Cloud Storage (/.netlify/functions/store-data) for online persistence across all devices & visitors
+// 1. Netlify Blobs Cloud Storage (https://top-laptop-dz-store.netlify.app/.netlify/functions/store-data)
+//    Works across Vercel (top-laptop.vercel.app), Netlify, and localhost across all devices (Phones & Computers)
 // 2. IndexedDB (unlimited browser storage for large product images without 5MB localStorage QuotaExceededError)
 // 3. LocalStorage fast synchronous cache with modification timestamps
 
 const IDB_NAME = 'top_laptop_db_v1';
 const IDB_STORE = 'keyval';
-const CLOUD_ENDPOINT = '/.netlify/functions/store-data';
+export const CLOUD_ENDPOINT = 'https://top-laptop-dz-store.netlify.app/.netlify/functions/store-data';
 const TIMESTAMPS_LS_KEY = 'top_laptop_timestamps_v1';
 
 export type StoreKey =
@@ -30,6 +31,45 @@ export const LOCAL_STORAGE_KEY_MAP: Record<StoreKey, string> = {
   activityLogs: 'top_laptop_activity_logs',
   themeSettings: 'top_laptop_theme_settings',
 };
+
+export function mergeOrdersById<T extends { id: string; createdAt?: string; updatedAt?: string; statusHistory?: any[] }>(
+  listA: T[] | undefined | null,
+  listB: T[] | undefined | null
+): T[] {
+  const arrA = Array.isArray(listA) ? listA : [];
+  const arrB = Array.isArray(listB) ? listB : [];
+  const map = new Map<string, T>();
+
+  for (const item of arrA) {
+    if (item && typeof item.id === 'string') {
+      map.set(item.id, item);
+    }
+  }
+
+  for (const item of arrB) {
+    if (item && typeof item.id === 'string') {
+      const existing = map.get(item.id);
+      if (!existing) {
+        map.set(item.id, item);
+      } else {
+        const lenA = Array.isArray(existing.statusHistory) ? existing.statusHistory.length : 0;
+        const lenB = Array.isArray(item.statusHistory) ? item.statusHistory.length : 0;
+        const tsA = existing.updatedAt ? Date.parse(existing.updatedAt) || 0 : 0;
+        const tsB = item.updatedAt ? Date.parse(item.updatedAt) || 0 : 0;
+
+        if (lenB > lenA || tsB >= tsA) {
+          map.set(item.id, item);
+        }
+      }
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    const tA = a.createdAt ? Date.parse(a.createdAt) || 0 : 0;
+    const tB = b.createdAt ? Date.parse(b.createdAt) || 0 : 0;
+    return tB - tA;
+  });
+}
 
 function getLocalTimestamps(): Partial<Record<StoreKey, number>> {
   try {
@@ -108,7 +148,6 @@ export function safeLocalStorageSet(storageKey: string, value: unknown): void {
     localStorage.removeItem('top_laptop_products');
     localStorage.setItem(storageKey, JSON.stringify(value));
   } catch {
-    // QuotaExceededError when product images are large: free space from heavy backup/log keys
     try {
       localStorage.removeItem('top_laptop_backups');
       localStorage.removeItem('top_laptop_activity_logs');
@@ -121,8 +160,8 @@ export function safeLocalStorageSet(storageKey: string, value: unknown): void {
 
 let activeHydrationPromise: Promise<Partial<Record<StoreKey, any>>> | null = null;
 
-export function fetchAllCloudAndLocalState(): Promise<Partial<Record<StoreKey, any>>> {
-  if (activeHydrationPromise) {
+export function fetchAllCloudAndLocalState(force = false): Promise<Partial<Record<StoreKey, any>>> {
+  if (!force && activeHydrationPromise) {
     return activeHydrationPromise;
   }
 
@@ -161,14 +200,12 @@ export function fetchAllCloudAndLocalState(): Promise<Partial<Record<StoreKey, a
       })
     );
 
-    // 2. Fetch from Netlify Cloud Blobs (/.netlify/functions/store-data)
+    // 2. Fetch from Netlify Cloud Blobs
     try {
       const res = await fetch(`${CLOUD_ENDPOINT}?t=${Date.now()}`, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
         },
         cache: 'no-store',
       });
@@ -199,6 +236,25 @@ export function fetchAllCloudAndLocalState(): Promise<Partial<Record<StoreKey, a
 
               const localTs = effectiveLocalTs[k] || 0;
 
+              // Special handling for `orders`: ALWAYS merge local and cloud orders by ID so no order from any phone/PC is ever lost!
+              if (k === 'orders') {
+                const localOrders = Array.isArray(result.orders) ? result.orders : [];
+                const remoteOrders = Array.isArray(cloudVal) ? cloudVal : [];
+                const mergedOrders = mergeOrdersById(remoteOrders, localOrders);
+
+                result.orders = mergedOrders;
+                const maxTs = Math.max(cloudTs, localTs, Date.now());
+                setLocalTimestamp('orders', maxTs);
+                idbTimestamps.orders = maxTs;
+                await idbSet('orders', mergedOrders);
+                safeLocalStorageSet(LOCAL_STORAGE_KEY_MAP.orders, mergedOrders);
+
+                if (!hasCloud || mergedOrders.length > remoteOrders.length) {
+                  newerLocalToPush.orders = { updatedAt: maxTs, value: mergedOrders };
+                }
+                continue;
+              }
+
               if (hasCloud && cloudVal !== undefined && cloudVal !== null && cloudTs >= localTs) {
                 // Cloud is newer or equal -> adopt Cloud value on this device (Phone or PC)
                 result[k] = cloudVal;
@@ -207,7 +263,7 @@ export function fetchAllCloudAndLocalState(): Promise<Partial<Record<StoreKey, a
                 await idbSet(k, cloudVal);
                 safeLocalStorageSet(LOCAL_STORAGE_KEY_MAP[k], cloudVal);
               } else if (result[k] !== undefined && (localTs > cloudTs || !hasCloud)) {
-                // Local device (e.g. PC) has saved edits newer than Cloud OR Cloud is still empty -> push Local to Cloud
+                // Local device has saved edits newer than Cloud OR Cloud is still empty -> push Local to Cloud
                 const pushTs = localTs > 0 ? localTs : Date.now();
                 setLocalTimestamp(k, pushTs);
                 idbTimestamps[k] = pushTs;
@@ -228,14 +284,14 @@ export function fetchAllCloudAndLocalState(): Promise<Partial<Record<StoreKey, a
         }
       }
     } catch {
-      // Offline or local dev server without Netlify Functions — IndexedDB + LocalStorage work seamlessly
+      // Offline or unreachable — IndexedDB + LocalStorage work seamlessly
     }
 
     return result;
   })().finally(() => {
     setTimeout(() => {
       activeHydrationPromise = null;
-    }, 1000);
+    }, 800);
   });
 
   return activeHydrationPromise;
@@ -276,6 +332,52 @@ export function persistStoreKey<T>(key: StoreKey, value: T, immediateCloud = fal
   } else {
     pendingCloudTimers[key] = setTimeout(sendToCloud, 150);
   }
+}
+
+/**
+ * Atomically appends a newly created customer order to local storage, IndexedDB, and Cloud Blobs
+ * and awaits the cloud response so the order is guaranteed to reach the Admin Dashboard immediately.
+ */
+export async function appendOrderToCloud<T extends { id: string }>(
+  newOrder: T,
+  currentLocalOrders: T[]
+): Promise<T[]> {
+  const updatedAt = Date.now();
+  const mergedLocal = mergeOrdersById(currentLocalOrders, [newOrder]);
+
+  setLocalTimestamp('orders', updatedAt);
+  safeLocalStorageSet(LOCAL_STORAGE_KEY_MAP.orders, mergedLocal);
+  await idbSet('orders', mergedLocal);
+  idbGet<Partial<Record<StoreKey, number>>>('_timestamps').then((existing) => {
+    idbSet('_timestamps', { ...(existing || {}), orders: updatedAt });
+  });
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(CLOUD_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'appendOrder', order: newOrder, updatedAt }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.ok && Array.isArray(data.orders)) {
+        const finalMerged = mergeOrdersById(mergedLocal, data.orders);
+        safeLocalStorageSet(LOCAL_STORAGE_KEY_MAP.orders, finalMerged);
+        await idbSet('orders', finalMerged);
+        return finalMerged;
+      }
+    }
+  } catch {
+    // Fallback: background persistStoreKey if offline or slow network
+    persistStoreKey('orders', mergedLocal, true);
+  }
+
+  return mergedLocal;
 }
 
 export function persistStoreBatch(batch: Partial<Record<StoreKey, any>>): void {

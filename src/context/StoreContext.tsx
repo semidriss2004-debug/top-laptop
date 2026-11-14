@@ -21,6 +21,8 @@ import {
   fetchAllCloudAndLocalState,
   persistStoreKey,
   persistStoreBatch,
+  appendOrderToCloud,
+  mergeOrdersById,
   idbGet,
   idbSet,
   safeLocalStorageSet,
@@ -137,6 +139,7 @@ interface StoreContextType {
   // General Settings
   updateSettings: (newSettings: Partial<StoreSettings>) => void;
   resetToDemoCatalog: () => void;
+  refreshFromCloud: () => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -384,42 +387,45 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [settings.storeName]);
 
-  // Hydrate from Netlify Cloud Blobs & IndexedDB on startup & window focus
+  const refreshFromCloud = React.useCallback(async () => {
+    const remote = await fetchAllCloudAndLocalState(true);
+    if (Array.isArray(remote.products)) {
+      setProducts(remote.products);
+    }
+    if (remote.settings && typeof remote.settings === 'object') {
+      const { normalized, migratedLegacyPhone } = normalizeStoreSettings(remote.settings);
+      setSettings(normalized);
+      if (migratedLegacyPhone) {
+        persistStoreKey('settings', normalized, true);
+      }
+    }
+    if (Array.isArray(remote.wilayas) && remote.wilayas.length > 0) {
+      setWilayas(remote.wilayas);
+    }
+    if (Array.isArray(remote.deliveryCompanies)) {
+      setDeliveryCompanies(remote.deliveryCompanies);
+    }
+    if (Array.isArray(remote.employees) && remote.employees.length > 0) {
+      setEmployees(remote.employees);
+    }
+    if (Array.isArray(remote.orders)) {
+      setOrders((prev) => mergeOrdersById(prev, remote.orders));
+    }
+    if (Array.isArray(remote.inventoryMovements)) {
+      setInventoryMovements(remote.inventoryMovements);
+    }
+    if (Array.isArray(remote.activityLogs)) {
+      setActivityLogs(remote.activityLogs);
+    }
+  }, []);
+
+  // Hydrate from Netlify Cloud Blobs & IndexedDB on startup, window focus, & live polling
   useEffect(() => {
     let isMounted = true;
 
     const runHydration = () => {
-      fetchAllCloudAndLocalState().then((remote) => {
-        if (!isMounted) return;
-        if (Array.isArray(remote.products)) {
-          setProducts(remote.products);
-        }
-        if (remote.settings && typeof remote.settings === 'object') {
-          const { normalized, migratedLegacyPhone } = normalizeStoreSettings(remote.settings);
-          setSettings(normalized);
-          if (migratedLegacyPhone) {
-            persistStoreKey('settings', normalized, true);
-          }
-        }
-        if (Array.isArray(remote.wilayas) && remote.wilayas.length > 0) {
-          setWilayas(remote.wilayas);
-        }
-        if (Array.isArray(remote.deliveryCompanies)) {
-          setDeliveryCompanies(remote.deliveryCompanies);
-        }
-        if (Array.isArray(remote.employees) && remote.employees.length > 0) {
-          setEmployees(remote.employees);
-        }
-        if (Array.isArray(remote.orders)) {
-          setOrders(remote.orders);
-        }
-        if (Array.isArray(remote.inventoryMovements)) {
-          setInventoryMovements(remote.inventoryMovements);
-        }
-        if (Array.isArray(remote.activityLogs)) {
-          setActivityLogs(remote.activityLogs);
-        }
-      });
+      if (!isMounted) return;
+      refreshFromCloud().catch(() => {});
     };
 
     runHydration();
@@ -429,6 +435,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         runHydration();
       }
     };
+
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        runHydration();
+      }
+    }, 8000);
 
     window.addEventListener('focus', handleVisibilityOrFocus);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
@@ -441,10 +453,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     return () => {
       isMounted = false;
+      clearInterval(pollInterval);
       window.removeEventListener('focus', handleVisibilityOrFocus);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     };
-  }, []);
+  }, [refreshFromCloud]);
 
   // Logging Activity
   const logActivity = (action: ActivityAction, details: string, targetRecord?: string) => {
@@ -677,8 +690,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
+      const rawImg = item.image || prod?.images?.[0] || '';
+      const compactImage = rawImg.startsWith('data:') && rawImg.length > 500 ? '' : rawImg;
+
       return {
         ...item,
+        image: compactImage,
         purchasePriceDZD: purchasePrice,
         sku: prod?.sku || item.sku || 'N/A',
         barcode: prod?.barcode || '',
@@ -717,11 +734,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
     });
 
-    setOrders(prev => {
-      const next = [newOrder, ...prev];
-      persistStoreKey('orders', next, true);
-      return next;
-    });
+    const nextOrders = mergeOrdersById(orders, [newOrder]);
+    setOrders(nextOrders);
+    const syncedOrders = await appendOrderToCloud(newOrder, nextOrders);
+    setOrders(syncedOrders);
+
     logActivity('ORDER_STATUS_UPDATE', `Nouvelle commande enregistrée ${orderId} (${orderData.customerName})`, orderId);
     return newOrder;
   };
@@ -1015,7 +1032,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         createDatabaseBackup,
         restoreDatabaseBackup,
         updateSettings,
-        resetToDemoCatalog
+        resetToDemoCatalog,
+        refreshFromCloud
       }}
     >
       {children}

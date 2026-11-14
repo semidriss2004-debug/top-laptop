@@ -19,17 +19,29 @@ import {
   Package, 
   FileText, 
   RotateCcw,
-  ShieldCheck 
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 
 export const OrdersManager: React.FC = () => {
-  const { orders, updateOrderStatus, hasPermission } = useStore();
+  const { orders, updateOrderStatus, hasPermission, refreshFromCloud } = useStore();
   const { t, language } = useLanguage();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [selectedOrderForBL, setSelectedOrderForBL] = useState<Order | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  React.useEffect(() => {
+    refreshFromCloud().catch(() => {});
+  }, [refreshFromCloud]);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshFromCloud().catch(() => {});
+    setTimeout(() => setIsRefreshing(false), 400);
+  };
 
   const canViewCosts = hasPermission('view_costs_profits');
   const formatPrice = (price: number) => price.toLocaleString('fr-DZ') + ' ' + t('dzd');
@@ -80,15 +92,26 @@ export const OrdersManager: React.FC = () => {
     <div className="space-y-4">
       {/* Search & Status Filter Toolbar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#080F1C] p-4 rounded-2xl border border-blue-900/40">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute inset-y-0 start-3 my-auto pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher par n° commande, BL, client..."
-            className="w-full bg-[#050A14] text-xs sm:text-sm text-white rounded-xl ps-9 pe-3 py-2 border border-blue-900/60 focus:border-cyan-400 focus:outline-none"
-          />
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-72">
+            <Search className="w-4 h-4 text-slate-400 absolute inset-y-0 start-3 my-auto pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={language === 'ar' ? 'ابحث برقم الطلب، الاسم، الهاتف...' : 'Rechercher par n° commande, BL, client...'}
+              className="w-full bg-[#050A14] text-xs sm:text-sm text-white rounded-xl ps-9 pe-3 py-2 border border-blue-900/60 focus:border-cyan-400 focus:outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            className="px-3 py-2 rounded-xl bg-blue-950/60 hover:bg-blue-900/60 text-cyan-300 border border-cyan-500/40 text-xs font-bold flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+            title={language === 'ar' ? 'تحديث الطلبات من السحابة' : 'Actualiser les commandes'}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{language === 'ar' ? 'تحديث الطلبات' : 'Actualiser'}</span>
+          </button>
         </div>
 
         {/* 9 Status Filter Tabs */}

@@ -50,12 +50,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
     logoutEmployee,
     deleteProduct,
     hasPermission,
+    refreshFromCloud,
   } = useStore();
   const { t, language, toggleLanguage } = useLanguage();
   
   const [activeTab, setActiveTab] = useState<
     'products' | 'orders' | 'analytics' | 'inventory' | 'delivery' | 'themes' | 'employees' | 'backups' | 'settings'
   >('products');
+
+  React.useEffect(() => {
+    refreshFromCloud().catch(() => {});
+  }, [activeTab, refreshFromCloud]);
+
+  const newOrdersCount = orders.filter(o => o.status === 'new').length;
 
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -66,7 +73,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
   const formatPrice = (price: number) => price.toLocaleString('fr-DZ') + ' ' + t('dzd');
   const canViewFinancials = hasPermission('view_costs_profits');
 
-  const handleManualCloudSync = () => {
+  const handleManualCloudSync = async () => {
     setIsSyncing(true);
     persistStoreBatch({
       products,
@@ -77,11 +84,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
       inventoryMovements,
       settings,
     });
-    setTimeout(() => {
-      setIsSyncing(false);
-      setSyncSuccess(true);
-      setTimeout(() => setSyncSuccess(false), 2500);
-    }, 600);
+    await refreshFromCloud().catch(() => {});
+    setIsSyncing(false);
+    setSyncSuccess(true);
+    setTimeout(() => setSyncSuccess(false), 2500);
   };
 
   const filteredProducts = products.filter(p => {
@@ -232,7 +238,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
             },
             {
               id: 'orders',
-              label: language === 'ar' ? `الطلبيات (${orders.length})` : `Commandes (${orders.length})`,
+              label:
+                language === 'ar'
+                  ? `الطلبيات (${orders.length})${newOrdersCount > 0 ? ` • ${newOrdersCount} جديد` : ''}`
+                  : `Commandes (${orders.length})${newOrdersCount > 0 ? ` • ${newOrdersCount} nouv.` : ''}`,
               icon: ShoppingCart,
               perm: 'manage_orders' as const
             },
