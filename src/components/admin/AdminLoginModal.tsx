@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { useLanguage } from '../../context/LanguageContext';
 import { ShieldCheck, Lock, X, AlertCircle } from 'lucide-react';
 
 interface AdminLoginModalProps {
@@ -15,7 +14,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   onSuccess
 }) => {
   const { loginEmployee } = useStore();
-  const { t, language } = useLanguage();
   const [passcode, setPasscode] = useState('');
   const [error, setError] = useState(false);
 

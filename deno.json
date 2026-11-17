@@ -1,0 +1,10 @@
+{
+  "lint": {
+    "include": ["deno_smoke.test.ts"],
+    "exclude": ["src/", "scripts/", "netlify/", "dist/", "node_modules/", "serve.js", "vite.config.ts"]
+  },
+  "test": {
+    "include": ["deno_smoke.test.ts"],
+    "exclude": ["src/", "scripts/", "netlify/", "dist/", "node_modules/", "serve.js", "vite.config.ts"]
+  }
+}

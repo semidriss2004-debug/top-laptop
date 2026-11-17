@@ -7,9 +7,7 @@ import { buildTelUrl, buildWhatsAppUrl } from '../../utils/contactLinks';
 import { 
   Search, 
   Phone, 
-  MapPin, 
   MessageCircle, 
-  Calendar, 
   ChevronDown, 
   ChevronUp, 
   CheckCircle, 
@@ -19,7 +17,6 @@ import {
   Package, 
   FileText, 
   RotateCcw,
-  ShieldCheck,
   RefreshCw
 } from 'lucide-react';
 

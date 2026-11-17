@@ -7,14 +7,11 @@ import {
   Check, 
   Eye, 
   RotateCw, 
-  Sparkles, 
-  ArrowRight, 
   Layers 
 } from 'lucide-react';
 
 export const ThemesManagerView: React.FC = () => {
   const { 
-    activeTheme, 
     activeThemeId, 
     setTheme, 
     themeSettings, 
@@ -25,7 +22,7 @@ export const ThemesManagerView: React.FC = () => {
     previewThemeId
   } = useTheme();
 
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const [rotationOrder, setRotationOrder] = useState<ThemeId[]>(themeSettings.rotationOrder);
 
   const handleToggleAutoRotate = () => {
@@ -111,7 +108,6 @@ export const ThemesManagerView: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {allThemes.map(theme => {
           const isActive = theme.id === activeThemeId;
-          const isPreviewing = theme.id === previewThemeId;
 
           return (
             <div

@@ -5,14 +5,10 @@ import { Order, OrderStatus } from '../types';
 import { 
   X, 
   Search, 
-  Package, 
   Truck, 
   CheckCircle2, 
   Clock, 
-  MapPin, 
-  Phone, 
-  AlertCircle,
-  ExternalLink 
+  AlertCircle
 } from 'lucide-react';
 
 interface OrderTrackingModalProps {
@@ -25,7 +21,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   onClose
 }) => {
   const { orders } = useStore();
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
 
   const [searchCode, setSearchCode] = useState('');
   const [phoneSearch, setPhoneSearch] = useState('');

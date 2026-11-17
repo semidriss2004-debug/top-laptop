@@ -1,24 +1,20 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { DeliveryCompany, Wilaya } from '../../types';
+import { DeliveryCompany } from '../../types';
 import { 
   Truck, 
   Plus, 
   Edit, 
   Trash2, 
-  Check, 
   X, 
   MapPin, 
-  Save, 
-  Phone, 
-  Globe, 
-  AlertCircle 
+  Phone 
 } from 'lucide-react';
 
 export const DeliveryCompaniesManager: React.FC = () => {
   const { deliveryCompanies, wilayas, addDeliveryCompany, updateDeliveryCompany, deleteDeliveryCompany, updateWilayaDeliveryPrice } = useStore();
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
 
   const [isEditingCompany, setIsEditingCompany] = useState<DeliveryCompany | null>(null);
   const [isCreating, setIsCreating] = useState(false);

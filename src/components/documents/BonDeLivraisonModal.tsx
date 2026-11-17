@@ -3,7 +3,6 @@ import { Order } from '../../types';
 import { useLanguage } from '../../context/LanguageContext';
 import { useStore } from '../../context/StoreContext';
 import { useTheme } from '../../context/ThemeContext';
-import { Logo } from '../Logo';
 import { 
   X, 
   Printer, 
@@ -13,8 +12,7 @@ import {
   Phone, 
   MapPin, 
   User, 
-  Calendar, 
-  ShieldCheck 
+  Calendar 
 } from 'lucide-react';
 
 interface BonDeLivraisonModalProps {
@@ -28,7 +26,7 @@ export const BonDeLivraisonModal: React.FC<BonDeLivraisonModalProps> = ({
   onClose,
   order
 }) => {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { settings } = useStore();
   const { activeTheme } = useTheme();
 

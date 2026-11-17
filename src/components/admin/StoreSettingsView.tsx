@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { useLanguage } from '../../context/LanguageContext';
 import {
   buildTelUrl,
   buildWhatsAppUrl,
@@ -10,16 +9,13 @@ import {
 import { 
   Save, 
   Phone, 
-  Mail, 
-  MapPin, 
   Share2, 
   CheckCircle2, 
   FileText 
 } from 'lucide-react';
 
 export const StoreSettingsView: React.FC = () => {
-  const { settings, updateSettings, resetToDemoCatalog } = useStore();
-  const { t } = useLanguage();
+  const { settings, updateSettings } = useStore();
 
   const [storeName, setStoreName] = useState(settings.storeName || 'TOP LAPTOP ALGERIE');
   const [flatFee, setFlatFee] = useState(settings.flatDeliveryFeeDZD);

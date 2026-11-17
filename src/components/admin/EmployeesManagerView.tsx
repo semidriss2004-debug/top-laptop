@@ -1,19 +1,14 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { useLanguage } from '../../context/LanguageContext';
 import { Employee, EmployeeRole, EmployeePermission } from '../../types';
 import { 
   Users, 
   UserPlus, 
   ShieldCheck, 
-  Lock, 
   Mail, 
-  CheckCircle, 
-  XCircle, 
   Edit, 
   Trash2, 
   History, 
-  Key, 
   X 
 } from 'lucide-react';
 
@@ -40,7 +35,6 @@ const ALL_PERMISSIONS: { perm: EmployeePermission; label: string }[] = [
 
 export const EmployeesManagerView: React.FC = () => {
   const { employees, addEmployee, updateEmployee, deleteEmployee, activityLogs, currentEmployee } = useStore();
-  const { t, language } = useLanguage();
 
   const [activeSubTab, setActiveSubTab] = useState<'employees' | 'logs'>('employees');
   const [isModalOpen, setIsModalOpen] = useState(false);

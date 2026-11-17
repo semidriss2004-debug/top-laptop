@@ -19,10 +19,7 @@ import {
   Check, 
   ChevronRight, 
   ChevronLeft,
-  Share2,
-  Key,
-  Briefcase,
-  Zap
+  Share2
 } from 'lucide-react';
 
 interface ProductModalProps {

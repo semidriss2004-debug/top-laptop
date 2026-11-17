@@ -1,25 +1,20 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { DatabaseBackup } from '../../types';
 import { 
   Database, 
   Download, 
   Upload, 
   CheckCircle2, 
   AlertTriangle, 
-  ShieldCheck, 
-  RefreshCw, 
-  Trash2, 
-  FileText 
+  RefreshCw 
 } from 'lucide-react';
 
 export const BackupRecoveryView: React.FC = () => {
-  const { backups, createDatabaseBackup, restoreDatabaseBackup, settings, updateSettings } = useStore();
+  const { backups, createDatabaseBackup, restoreDatabaseBackup } = useStore();
 
   const [restoreSuccess, setRestoreSuccess] = useState(false);
   const [restoreError, setRestoreError] = useState('');
   const [uploadedJson, setUploadedJson] = useState('');
-  const [confirmRestoreId, setConfirmRestoreId] = useState<string | null>(null);
 
   const handleCreateManualBackup = () => {
     const bkp = createDatabaseBackup();
@@ -43,7 +38,7 @@ export const BackupRecoveryView: React.FC = () => {
         const text = event.target?.result as string;
         setUploadedJson(text);
         setRestoreError('');
-      } catch (err) {
+      } catch {
         setRestoreError('Fichier de sauvegarde illisible.');
       }
     };
@@ -60,7 +55,6 @@ export const BackupRecoveryView: React.FC = () => {
       setRestoreSuccess(true);
       setRestoreError('');
       setUploadedJson('');
-      setConfirmRestoreId(null);
       setTimeout(() => setRestoreSuccess(false), 4000);
     } else {
       setRestoreError('Échec de la restauration : Le fichier de sauvegarde est corrompu ou invalide.');

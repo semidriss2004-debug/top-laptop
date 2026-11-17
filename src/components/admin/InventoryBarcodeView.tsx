@@ -1,24 +1,18 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { useLanguage } from '../../context/LanguageContext';
 import { Product, StockMovementType } from '../../types';
 import { 
   Boxes, 
   Barcode, 
   AlertTriangle, 
   Plus, 
-  Minus, 
-  RotateCcw, 
   Search, 
   Printer, 
-  History, 
-  Check, 
   X 
 } from 'lucide-react';
 
 export const InventoryBarcodeView: React.FC = () => {
-  const { products, inventoryMovements, recordStockMovement, updateProduct } = useStore();
-  const { t } = useLanguage();
+  const { products, recordStockMovement } = useStore();
 
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'low_stock' | 'out_of_stock'>('all');
@@ -76,7 +70,6 @@ export const InventoryBarcodeView: React.FC = () => {
     if (!adjustingProduct) return;
 
     const change = adjustType === 'out_sale' || adjustType === 'damaged' ? -Math.abs(adjustQty) : Math.abs(adjustQty);
-    const newStock = Math.max(0, adjustingProduct.stock + change);
 
     recordStockMovement(
       adjustingProduct.id,

@@ -5,25 +5,19 @@ import {
   TrendingUp, 
   DollarSign, 
   ShoppingCart, 
-  CheckCircle, 
-  Clock, 
-  XCircle, 
-  Users, 
-  Boxes, 
   BarChart3, 
   Calendar, 
   Download, 
-  MapPin, 
-  PieChart 
+  MapPin 
 } from 'lucide-react';
 
 export const AnalyticsView: React.FC = () => {
-  const { orders, products, hasPermission } = useStore();
+  const { orders, hasPermission } = useStore();
   const { t } = useLanguage();
 
   const [dateFilter, setDateFilter] = useState<'today' | '7days' | '30days' | 'this_month' | 'prev_month' | 'all'>('30days');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
+  const [customStart] = useState('');
+  const [customEnd] = useState('');
 
   const canViewFinancials = hasPermission('view_costs_profits');
 
@@ -66,13 +60,11 @@ export const AnalyticsView: React.FC = () => {
   const totalOrdersCount = filteredOrders.length;
   const completedOrdersCount = filteredOrders.filter(o => o.status === 'delivered').length;
   const pendingOrdersCount = filteredOrders.filter(o => o.status === 'new' || o.status === 'confirmed' || o.status === 'preparing' || o.status === 'shipped').length;
-  const cancelledOrdersCount = filteredOrders.filter(o => o.status === 'cancelled' || o.status === 'returned').length;
   
   const averageOrderValue = nonCancelledOrders.length > 0 ? Math.round(totalRevenueDZD / nonCancelledOrders.length) : 0;
   
   // Unique Customers Count
   const uniqueCustomersCount = new Set(filteredOrders.map(o => o.customerPhone.trim())).size;
-  const lowStockCount = products.filter(p => p.stock <= (p.minStockAlert || 3)).length;
 
   // Best Selling Products
   const bestSellers = useMemo(() => {

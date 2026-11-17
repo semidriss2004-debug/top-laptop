@@ -10,17 +10,11 @@ import {
   CompatibleLaptopSize
 } from '../../types';
 import { useStore } from '../../context/StoreContext';
-import { useLanguage } from '../../context/LanguageContext';
 import { 
   X, 
   Save, 
   Image, 
-  Cpu, 
-  Layers, 
-  HardDrive, 
-  Monitor, 
   DollarSign, 
-  Barcode, 
   Key, 
   Briefcase, 
   Wand2,
@@ -61,8 +55,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   onClose,
   productToEdit
 }) => {
-  const { addProduct, updateProduct, hasPermission } = useStore();
-  const { t } = useLanguage();
+  const { addProduct, updateProduct } = useStore();
 
   const [name, setName] = useState(productToEdit?.name || '');
   const [brand, setBrand] = useState<ProductBrand>(productToEdit?.brand || 'ASUS');

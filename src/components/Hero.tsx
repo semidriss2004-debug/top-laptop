@@ -14,8 +14,6 @@ import {
   ArrowRight,
   Sparkles,
   Layers,
-  HardDrive,
-  Monitor,
   ChevronLeft,
   ChevronRight,
   ShoppingBag
