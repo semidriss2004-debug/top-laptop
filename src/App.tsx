@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { StoreProvider, useStore } from './context/StoreContext';
@@ -597,6 +598,7 @@ export default function App() {
         <StoreProvider>
           <CartProvider>
             <StorefrontContent />
+            <Analytics />
           </CartProvider>
         </StoreProvider>
       </LanguageProvider>
