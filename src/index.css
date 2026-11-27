@@ -97,6 +97,7 @@
 
   /* Collapse wrapper ancestors so they add no extra height or page breaks */
   body:has(.printable-modal-root) *:has(.printable-modal-root) {
+    display: block !important;
     min-height: 0 !important;
     height: auto !important;
     max-height: none !important;
@@ -106,6 +107,12 @@
     border: none !important;
     background: transparent !important;
     box-shadow: none !important;
+  }
+
+  .printable-modal-root:has(.commercial-doc-flow) {
+    page-break-after: auto !important;
+    page-break-before: auto !important;
+    break-inside: auto !important;
   }
 
   .printable-modal-root {
@@ -132,5 +139,10 @@
     box-shadow: none !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+  }
+
+  .printable-slip-card.commercial-doc-flow {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
   }
 }

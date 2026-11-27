@@ -318,7 +318,8 @@ export type EmployeeRole =
   | 'PRODUCT_MANAGER'  // Products, categories, software, inventory
   | 'SALES_AGENT'      // Orders and customer contact
   | 'ACCOUNTANT'       // Financial reports, costs, profits
-  | 'DELIVERY_MANAGER';// Delivery companies, shipping
+  | 'DELIVERY_MANAGER' // Delivery companies, shipping
+  | 'CASHIER';         // Payments & receipts issuance
 
 export type EmployeePermission = 
   | 'manage_products'
@@ -329,7 +330,15 @@ export type EmployeePermission =
   | 'view_analytics'
   | 'manage_inventory'
   | 'manage_backups'
-  | 'manage_settings';
+  | 'manage_settings'
+  | 'view_documents'
+  | 'issue_bl'
+  | 'issue_proforma'
+  | 'issue_facture'
+  | 'issue_receipt'
+  | 'cancel_documents'
+  | 'manage_document_settings'
+  | 'manage_customers';
 
 export interface Employee {
   id: string;
@@ -360,7 +369,16 @@ export type ActivityAction =
   | 'THEME_CHANGE' 
   | 'BACKUP_CREATE' 
   | 'BACKUP_RESTORE' 
-  | 'FINANCIAL_EXPORT';
+  | 'FINANCIAL_EXPORT'
+  | 'DOCUMENT_CREATE'
+  | 'DOCUMENT_UPDATE'
+  | 'DOCUMENT_ISSUE'
+  | 'DOCUMENT_CANCEL'
+  | 'DOCUMENT_CONVERT'
+  | 'DOCUMENT_SETTINGS_UPDATE'
+  | 'CUSTOMER_CREATE'
+  | 'CUSTOMER_UPDATE'
+  | 'CUSTOMER_DELETE';
 
 export interface ActivityLogEntry {
   id: string;
@@ -408,6 +426,175 @@ export interface DatabaseBackup {
     ordersCount: number;
     employeesCount: number;
     deliveryCompaniesCount: number;
+    documentsCount?: number;
+    customersCount?: number;
   };
   dataJson: string; // Serialized complete snapshot
+}
+
+// ==========================================
+// CUSTOMERS / B2B CLIENTS DATABASE
+// ==========================================
+export type CustomerClientType = 'shop' | 'company' | 'institution';
+
+export interface CustomerRecord {
+  id: string;
+  companyName: string;      // اسم المحل أو الشركة
+  contactPerson: string;    // اسم المسؤول أو جهة الاتصال
+  clientType: CustomerClientType; // محل تجاري / شركة / مؤسسة
+  phone: string;            // رقم الهاتف
+  email?: string;           // البريد الإلكتروني (اختياري)
+  wilayaCode: number;       // رقم الولاية (1-69)
+  wilayaNameFr: string;
+  wilayaNameAr: string;
+  address: string;          // العنوان بالتفصيل
+  nif?: string;             // الرقم الجبائي (اختياري)
+  rc?: string;              // السجل التجاري (اختياري)
+  notes?: string;           // ملاحظات إضافية
+  createdAt: string;        // تاريخ الإضافة
+  updatedAt?: string;
+}
+
+// ==========================================
+// COMMERCIAL DOCUMENTS MODULE (BL, PROFORMA, FACTURE, RECU)
+// ==========================================
+export type CommercialDocType = 'bl' | 'proforma' | 'facture' | 'receipt';
+
+export type CommercialDocStatus =
+  | 'draft'
+  | 'issued'
+  | 'partial'
+  | 'paid'
+  | 'cancelled'
+  | 'prepared'
+  | 'delivered'
+  | 'returned';
+
+export type ReceiptPaymentMethod =
+  | 'cash'
+  | 'cheque'
+  | 'bank_transfer'
+  | 'ccp_baridimob'
+  | 'other';
+
+export interface CommercialDocumentLine {
+  id: string;
+  productId?: string;
+  sku?: string;
+  productName: string;
+  description?: string;
+  quantity: number;
+  unitPriceDZD: number;
+  discountDZD: number;
+  lineTotalDZD: number;
+}
+
+export interface CommercialDocumentCustomer {
+  name: string;
+  phone: string;
+  address: string;
+  wilayaCode?: number;
+  wilayaNameFr?: string;
+  wilayaNameAr?: string;
+  communeNameFr?: string;
+  communeNameAr?: string;
+  nif?: string;
+  rc?: string;
+  nis?: string;
+  ai?: string;
+}
+
+export interface ReceiptPaymentDetails {
+  chequeNumber?: string;
+  bankName?: string;
+  transferRef?: string;
+  ccpAccount?: string;
+  otherLabel?: string;
+}
+
+export interface CommercialDocument {
+  id: string;
+  type: CommercialDocType;
+  number: string; // e.g. BL-2026-0001, PRO-2026-0001, FAC-2026-0001, REC-2026-0001
+  year: number;
+  sequenceNumber: number;
+  date: string; // ISO YYYY-MM-DD
+  status: CommercialDocStatus;
+
+  // Traceability & Conversion links
+  orderId?: string;
+  sourceDocumentId?: string;
+  sourceDocumentNumber?: string;
+  linkedFactureId?: string;
+  linkedFactureNumber?: string;
+
+  customer: CommercialDocumentCustomer;
+  lines: CommercialDocumentLine[];
+
+  // Monetary totals (DZD)
+  subtotalDZD: number;      // Sum of (qty * unitPrice) before discounts
+  discountTotalDZD: number; // Line discounts + any global discount
+  netHtDZD: number;         // subtotal - discountTotal
+  tvaRate: number;          // Percentage (e.g. 0 or 19)
+  tvaAmountDZD: number;
+  applyTimbre?: boolean;
+  timbreRatePercent?: number;
+  timbreAmountDZD: number;
+  deliveryFeeDZD: number;
+  totalDZD: number;
+
+  notes?: string;
+
+  // BL-specific fields
+  blShowPrices?: boolean;
+  deliveryCompanyId?: string;
+  deliveryCompanyName?: string;
+  deliveryMethod?: DeliveryMethod;
+  trackingNumber?: string;
+
+  // Proforma-specific fields
+  validityDate?: string;
+
+  // Facture-specific fields
+  paymentTerms?: string;
+  amountPaidDZD?: number;
+  remainingAmountDZD?: number;
+
+  // Receipt-specific fields
+  paymentMethod?: ReceiptPaymentMethod;
+  paymentMethodDetails?: ReceiptPaymentDetails;
+  paymentAmountDZD?: number;
+
+  // Audit metadata
+  createdBy: string;
+  createdByEmployeeId?: string;
+  createdAt: string;
+  updatedAt?: string;
+  issuedAt?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
+}
+
+export interface DocumentCompanySettings {
+  companyName: string;
+  logoDataUrl?: string;
+  address: string;
+  phone: string;
+  email: string;
+  rc: string;
+  nif: string;
+  nis: string;
+  ai: string;
+  bankName: string;
+  rib: string;
+  defaultTvaRate: number;
+  enableTimbre: boolean;
+  timbreRatePercent: number;
+  timbreMinDZD: number;
+  timbreMaxDZD: number;
+  customFooterText: string;
+  bankDetailsText: string;
+  generalTerms: string;
+  prefixes: Record<CommercialDocType, string>;
+  counters: Record<string, number>; // e.g. { "bl_2026": 1, "proforma_2026": 1 }
 }

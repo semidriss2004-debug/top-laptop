@@ -8,6 +8,7 @@ const IDB_NAME = 'top_laptop_db_v1';
 const IDB_STORE = 'keyval';
 export const CLOUD_ENDPOINT = 'https://top-laptop-dz-store.netlify.app/.netlify/functions/store-data';
 const TIMESTAMPS_LS_KEY = 'top_laptop_timestamps_v1';
+const DIRTY_KEYS_LS_KEY = 'top_laptop_dirty_keys_v1';
 
 export type StoreKey =
   | 'products'
@@ -18,7 +19,10 @@ export type StoreKey =
   | 'orders'
   | 'inventoryMovements'
   | 'activityLogs'
-  | 'themeSettings';
+  | 'themeSettings'
+  | 'commercialDocuments'
+  | 'documentSettings'
+  | 'customers';
 
 export const LOCAL_STORAGE_KEY_MAP: Record<StoreKey, string> = {
   products: 'top_laptop_products_v3',
@@ -30,6 +34,9 @@ export const LOCAL_STORAGE_KEY_MAP: Record<StoreKey, string> = {
   inventoryMovements: 'top_laptop_inventory_movements',
   activityLogs: 'top_laptop_activity_logs',
   themeSettings: 'top_laptop_theme_settings',
+  commercialDocuments: 'top_laptop_commercial_documents_v1',
+  documentSettings: 'top_laptop_document_settings_v1',
+  customers: 'top_laptop_customers_v1',
 };
 
 export function mergeOrdersById<T extends { id: string; createdAt?: string; updatedAt?: string; statusHistory?: any[] }>(
@@ -89,6 +96,41 @@ function setLocalTimestamp(key: StoreKey, ts: number): void {
     const current = getLocalTimestamps();
     current[key] = ts;
     localStorage.setItem(TIMESTAMPS_LS_KEY, JSON.stringify(current));
+  } catch {
+    // ignore
+  }
+}
+
+function getDirtyKeys(): Partial<Record<StoreKey, number>> {
+  try {
+    const raw = localStorage.getItem(DIRTY_KEYS_LS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function markKeyDirty(key: StoreKey, ts: number): void {
+  try {
+    const current = getDirtyKeys();
+    current[key] = ts;
+    localStorage.setItem(DIRTY_KEYS_LS_KEY, JSON.stringify(current));
+  } catch {
+    // ignore
+  }
+}
+
+function clearKeyDirtyIfUnchanged(key: StoreKey, syncedTs: number): void {
+  try {
+    const current = getDirtyKeys();
+    if (current[key] && current[key]! <= syncedTs) {
+      delete current[key];
+      localStorage.setItem(DIRTY_KEYS_LS_KEY, JSON.stringify(current));
+    }
   } catch {
     // ignore
   }
@@ -235,6 +277,16 @@ export function fetchAllCloudAndLocalState(force = false): Promise<Partial<Recor
                   : cloudEntry;
 
               const localTs = effectiveLocalTs[k] || 0;
+              const dirtyTs = getDirtyKeys()[k] || 0;
+
+              // If local device has unsynced edits (`dirtyTs > 0`), NEVER let Cloud overwrite them on refresh!
+              if (dirtyTs > 0 && result[k] !== undefined) {
+                const pushTs = Math.max(localTs, cloudTs + 1, Date.now());
+                setLocalTimestamp(k, pushTs);
+                idbTimestamps[k] = pushTs;
+                newerLocalToPush[k] = { updatedAt: pushTs, value: result[k] };
+                continue;
+              }
 
               // Special handling for `orders`: ALWAYS merge local and cloud orders by ID so no order from any phone/PC is ever lost!
               if (k === 'orders') {
@@ -251,6 +303,25 @@ export function fetchAllCloudAndLocalState(force = false): Promise<Partial<Recor
 
                 if (!hasCloud || mergedOrders.length > remoteOrders.length) {
                   newerLocalToPush.orders = { updatedAt: maxTs, value: mergedOrders };
+                }
+                continue;
+              }
+
+              // Merge commercialDocuments by ID using updatedAt/createdAt so no issued document or receipt is lost
+              if (k === 'commercialDocuments') {
+                const localDocs = Array.isArray(result.commercialDocuments) ? result.commercialDocuments : [];
+                const remoteDocs = Array.isArray(cloudVal) ? cloudVal : [];
+                const mergedDocs = mergeOrdersById(remoteDocs, localDocs);
+
+                result.commercialDocuments = mergedDocs;
+                const maxTs = Math.max(cloudTs, localTs, Date.now());
+                setLocalTimestamp('commercialDocuments', maxTs);
+                idbTimestamps.commercialDocuments = maxTs;
+                await idbSet('commercialDocuments', mergedDocs);
+                safeLocalStorageSet(LOCAL_STORAGE_KEY_MAP.commercialDocuments, mergedDocs);
+
+                if (!hasCloud || mergedDocs.length > remoteDocs.length) {
+                  newerLocalToPush.commercialDocuments = { updatedAt: maxTs, value: mergedDocs };
                 }
                 continue;
               }
@@ -274,11 +345,16 @@ export function fetchAllCloudAndLocalState(force = false): Promise<Partial<Recor
             await idbSet('_timestamps', idbTimestamps);
 
             if (Object.keys(newerLocalToPush).length > 0) {
-              await fetch(CLOUD_ENDPOINT, {
+              const pushRes = await fetch(CLOUD_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ batch: newerLocalToPush }),
-              }).catch(() => {});
+              }).catch(() => null);
+              if (pushRes && pushRes.ok) {
+                for (const [k, item] of Object.entries(newerLocalToPush)) {
+                  clearKeyDirtyIfUnchanged(k as StoreKey, item.updatedAt);
+                }
+              }
             }
           }
         }
@@ -303,24 +379,31 @@ export function persistStoreKey<T>(key: StoreKey, value: T, immediateCloud = fal
   const lsKey = LOCAL_STORAGE_KEY_MAP[key];
   const updatedAt = Date.now();
 
-  // 1. Save timestamp & value to LocalStorage (with quota protection)
+  // 1. Save timestamp, dirty flag & value to LocalStorage synchronously so page Refresh never loses edits
   setLocalTimestamp(key, updatedAt);
+  markKeyDirty(key, updatedAt);
   safeLocalStorageSet(lsKey, value);
 
-  // 2. Save value & timestamp to IndexedDB (unlimited image storage)
+  // 2. Save value & timestamp to IndexedDB (unlimited storage)
   idbSet(key, value);
   idbGet<Partial<Record<StoreKey, number>>>('_timestamps').then((existing) => {
     const nextTs = { ...(existing || {}), [key]: updatedAt };
     idbSet('_timestamps', nextTs);
   });
 
-  // 3. Save to Netlify Cloud Blobs
+  // 3. Save to Netlify Cloud Blobs and clear dirty flag ONLY on confirmed server ack
   const sendToCloud = () => {
     fetch(CLOUD_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, value, updatedAt }),
-    }).catch(() => {});
+    })
+      .then((res) => {
+        if (res.ok) {
+          clearKeyDirtyIfUnchanged(key, updatedAt);
+        }
+      })
+      .catch(() => {});
   };
 
   if (pendingCloudTimers[key]) {
@@ -332,6 +415,42 @@ export function persistStoreKey<T>(key: StoreKey, value: T, immediateCloud = fal
   } else {
     pendingCloudTimers[key] = setTimeout(sendToCloud, 150);
   }
+}
+
+export async function persistStoreKeyWithAck<T>(
+  key: StoreKey,
+  value: T
+): Promise<{ savedLocal: boolean; syncedCloud: boolean }> {
+  const lsKey = LOCAL_STORAGE_KEY_MAP[key];
+  const updatedAt = Date.now();
+
+  setLocalTimestamp(key, updatedAt);
+  markKeyDirty(key, updatedAt);
+  safeLocalStorageSet(lsKey, value);
+
+  await idbSet(key, value);
+  const existing = await idbGet<Partial<Record<StoreKey, number>>>('_timestamps');
+  await idbSet('_timestamps', { ...(existing || {}), [key]: updatedAt });
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(CLOUD_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value, updatedAt }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      clearKeyDirtyIfUnchanged(key, updatedAt);
+      return { savedLocal: true, syncedCloud: true };
+    }
+  } catch {
+    // Saved safely in LocalStorage + IndexedDB and queued via dirtyKeys for next sync
+  }
+
+  return { savedLocal: true, syncedCloud: false };
 }
 
 /**
@@ -387,6 +506,7 @@ export function persistStoreBatch(batch: Partial<Record<StoreKey, any>>): void {
   for (const [k, v] of Object.entries(batch) as [StoreKey, any][]) {
     if (v !== undefined) {
       setLocalTimestamp(k, updatedAt);
+      markKeyDirty(k, updatedAt);
       safeLocalStorageSet(LOCAL_STORAGE_KEY_MAP[k], v);
       idbSet(k, v);
       envelopeBatch[k] = { updatedAt, value: v };
@@ -405,5 +525,13 @@ export function persistStoreBatch(batch: Partial<Record<StoreKey, any>>): void {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ batch: envelopeBatch }),
-  }).catch(() => {});
+  })
+    .then((res) => {
+      if (res.ok) {
+        for (const k of Object.keys(envelopeBatch) as StoreKey[]) {
+          clearKeyDirtyIfUnchanged(k, updatedAt);
+        }
+      }
+    })
+    .catch(() => {});
 }

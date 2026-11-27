@@ -12,7 +12,11 @@ import {
   ActivityAction, 
   InventoryMovement, 
   StockMovementType, 
-  DatabaseBackup 
+  DatabaseBackup,
+  CommercialDocType,
+  CommercialDocument,
+  DocumentCompanySettings,
+  CustomerRecord
 } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SETTINGS, INITIAL_EMPLOYEES } from '../data/initialProducts';
 import { INITIAL_69_WILAYAS } from '../data/wilayas69';
@@ -20,6 +24,7 @@ import { INITIAL_DELIVERY_COMPANIES } from '../data/initialDeliveryCompanies';
 import {
   fetchAllCloudAndLocalState,
   persistStoreKey,
+  persistStoreKeyWithAck,
   persistStoreBatch,
   appendOrderToCloud,
   mergeOrdersById,
@@ -32,32 +37,70 @@ import {
   buildWhatsAppUrl,
   OFFICIAL_PHONE_LOCAL,
 } from '../utils/contactLinks';
+import {
+  DEFAULT_SITE_CONFIG,
+  loadPersistedSiteConfig,
+  saveSiteConfigToStorage,
+  siteConfigToStoreSettingsPatch,
+} from '../config/siteConfig';
+import {
+  createCustomerInDatabase,
+  CustomerDbSource,
+  deleteCustomerFromDatabase,
+  fetchCustomersFromDatabase,
+  updateCustomerInDatabase,
+} from '../services/customersApi';
+import {
+  buildConvertedDraft,
+  createDefaultDocumentSettings,
+  generateNextDocumentNumber,
+  getCounterKey,
+  getPermissionForDocType,
+  migrateEmployeesDocPermissions,
+  normalizeDocumentSettings,
+  recalculateDocumentTotals,
+  reconcileFacturesWithReceipts,
+  validateCommercialDocumentInput,
+} from '../utils/commercialDocuments';
 
 function normalizeStoreSettings(raw?: Partial<StoreSettings> | null): {
   normalized: StoreSettings;
   migratedLegacyPhone: boolean;
 } {
+  const persistedSite = loadPersistedSiteConfig();
+
   if (!raw || typeof raw !== 'object') {
-    return { normalized: INITIAL_SETTINGS, migratedLegacyPhone: false };
+    const base = persistedSite
+      ? {
+          ...INITIAL_SETTINGS,
+          ...siteConfigToStoreSettingsPatch(persistedSite),
+          socialLinks: {
+            ...INITIAL_SETTINGS.socialLinks,
+            ...siteConfigToStoreSettingsPatch(persistedSite).socialLinks!,
+          },
+        }
+      : INITIAL_SETTINGS;
+    return { normalized: base, migratedLegacyPhone: false };
   }
 
   const rawWhatsapp = raw.whatsappNumber?.trim();
   const rawContactPhone = raw.contactPhone?.trim();
 
-  const legacyWhatsapp = isLegacyDemoPhone(rawWhatsapp);
-  const legacyContact = isLegacyDemoPhone(rawContactPhone);
+  // Only migrate legacy placeholder phone numbers if the user hasn't saved a custom siteConfig yet
+  const legacyWhatsapp = !persistedSite && isLegacyDemoPhone(rawWhatsapp);
+  const legacyContact = !persistedSite && isLegacyDemoPhone(rawContactPhone);
 
   const whatsappNumber = legacyWhatsapp
     ? !legacyContact && rawContactPhone
       ? rawContactPhone
-      : OFFICIAL_PHONE_LOCAL
-    : rawWhatsapp!;
+      : DEFAULT_SITE_CONFIG.whatsappNumber
+    : rawWhatsapp || DEFAULT_SITE_CONFIG.whatsappNumber;
 
   const contactPhone = legacyContact
     ? !legacyWhatsapp && rawWhatsapp
       ? rawWhatsapp
-      : OFFICIAL_PHONE_LOCAL
-    : rawContactPhone!;
+      : DEFAULT_SITE_CONFIG.phone
+    : rawContactPhone || DEFAULT_SITE_CONFIG.phone;
 
   const mergedSocial = {
     ...INITIAL_SETTINGS.socialLinks,
@@ -76,9 +119,10 @@ function normalizeStoreSettings(raw?: Partial<StoreSettings> | null): {
   };
 
   const migratedLegacyPhone =
-    (Boolean(rawWhatsapp) && legacyWhatsapp) ||
-    (Boolean(rawContactPhone) && legacyContact) ||
-    isLegacyDemoPhone(raw.socialLinks?.whatsapp);
+    !persistedSite &&
+    ((Boolean(rawWhatsapp) && legacyWhatsapp) ||
+      (Boolean(rawContactPhone) && legacyContact) ||
+      isLegacyDemoPhone(raw.socialLinks?.whatsapp));
 
   return { normalized, migratedLegacyPhone };
 }
@@ -137,9 +181,55 @@ interface StoreContextType {
   restoreDatabaseBackup: (backupJson: string) => boolean;
   
   // General Settings
-  updateSettings: (newSettings: Partial<StoreSettings>) => void;
+  updateSettings: (newSettings: Partial<StoreSettings>) => Promise<{ savedLocal: boolean; syncedCloud: boolean }>;
   resetToDemoCatalog: () => void;
   refreshFromCloud: () => Promise<void>;
+
+  // Commercial Documents Module (BL, Proforma, Facture, Receipt)
+  commercialDocuments: CommercialDocument[];
+  documentSettings: DocumentCompanySettings;
+  createCommercialDocument: (
+    draft: Omit<CommercialDocument, 'id' | 'number' | 'sequenceNumber' | 'year' | 'createdAt'>,
+    issueImmediately?: boolean
+  ) => { ok: true; document: CommercialDocument } | { ok: false; errors: string[] };
+  updateDraftDocument: (
+    docId: string,
+    patch: Partial<CommercialDocument>
+  ) => { ok: true; document: CommercialDocument } | { ok: false; errors: string[] };
+  issueCommercialDocument: (
+    docId: string
+  ) => { ok: true; document: CommercialDocument } | { ok: false; errors: string[] };
+  updateBLStatus: (
+    docId: string,
+    status: 'prepared' | 'delivered' | 'returned'
+  ) => { ok: true; document: CommercialDocument } | { ok: false; errors: string[] };
+  cancelCommercialDocument: (
+    docId: string,
+    reason?: string
+  ) => { ok: true; document: CommercialDocument } | { ok: false; errors: string[] };
+  duplicateCommercialDocument: (
+    docId: string
+  ) => { ok: true; document: CommercialDocument } | { ok: false; errors: string[] };
+  convertCommercialDocument: (
+    sourceId: string,
+    targetType: CommercialDocType,
+    issueImmediately?: boolean
+  ) => { ok: true; document: CommercialDocument } | { ok: false; errors: string[] };
+  updateDocumentSettings: (patch: Partial<DocumentCompanySettings>) => void;
+  resetDocumentCounter: (type: CommercialDocType, year: number, nextValue: number) => void;
+
+  // B2B Customers Database (Server JSON/API & Cloud Blobs)
+  customers: CustomerRecord[];
+  customersDbSource: CustomerDbSource;
+  refreshCustomersFromDb: () => Promise<void>;
+  createCustomerRecord: (
+    input: Omit<CustomerRecord, 'id' | 'createdAt' | 'updatedAt'>
+  ) => Promise<{ ok: true; customer: CustomerRecord } | { ok: false; errors: string[] }>;
+  updateCustomerRecord: (
+    id: string,
+    input: Omit<CustomerRecord, 'id' | 'createdAt' | 'updatedAt'>
+  ) => Promise<{ ok: true; customer: CustomerRecord } | { ok: false; errors: string[] }>;
+  deleteCustomerRecord: (id: string) => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -245,13 +335,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return INITIAL_DELIVERY_COMPANIES;
   });
 
-  // 4. Employees & RBAC
+  // 4. Employees & RBAC (with non-destructive migration for document permissions)
   const [employees, setEmployees] = useState<Employee[]>(() => {
     try {
       const saved = localStorage.getItem('top_laptop_employees');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const { employees: migrated, changed } = migrateEmployeesDocPermissions(parsed);
+          if (changed) {
+            safeLocalStorageSet('top_laptop_employees', migrated);
+          }
+          return migrated;
+        }
       }
     } catch (e) {
       console.error(e);
@@ -263,7 +359,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(() => {
     try {
       const saved = localStorage.getItem('top_laptop_current_employee');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed) {
+          const { employees: migrated } = migrateEmployeesDocPermissions([parsed]);
+          return migrated[0] || parsed;
+        }
+      }
     } catch (e) {
       console.error(e);
     }
@@ -360,14 +462,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return [];
   });
 
-  // 9. Store Settings
+  // 9. Store Settings (synced with central siteConfig.ts)
   const [settings, setSettings] = useState<StoreSettings>(() => {
+    const persistedSite = loadPersistedSiteConfig();
     try {
       const saved = localStorage.getItem('top_laptop_settings_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
           const { normalized, migratedLegacyPhone } = normalizeStoreSettings(parsed);
+          if (persistedSite) {
+            const sitePatch = siteConfigToStoreSettingsPatch(persistedSite);
+            const synced: StoreSettings = {
+              ...normalized,
+              ...sitePatch,
+              socialLinks: {
+                ...normalized.socialLinks,
+                ...sitePatch.socialLinks!,
+              },
+            };
+            return synced;
+          }
           if (migratedLegacyPhone) {
             safeLocalStorageSet('top_laptop_settings_v2', normalized);
           }
@@ -377,8 +492,73 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (e) {
       console.error(e);
     }
+    if (persistedSite) {
+      const sitePatch = siteConfigToStoreSettingsPatch(persistedSite);
+      return {
+        ...INITIAL_SETTINGS,
+        ...sitePatch,
+        socialLinks: {
+          ...INITIAL_SETTINGS.socialLinks,
+          ...sitePatch.socialLinks!,
+        },
+      };
+    }
     return INITIAL_SETTINGS;
   });
+
+  const settingsRef = React.useRef<StoreSettings>(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  // 10. Commercial Documents & Document Settings (Migrated non-destructively)
+  const [documentSettings, setDocumentSettings] = useState<DocumentCompanySettings>(() => {
+    try {
+      const saved = localStorage.getItem('top_laptop_document_settings_v1');
+      if (saved) {
+        return normalizeDocumentSettings(JSON.parse(saved), INITIAL_SETTINGS);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return createDefaultDocumentSettings(settings);
+  });
+
+  const [commercialDocuments, setCommercialDocuments] = useState<CommercialDocument[]>(() => {
+    try {
+      const saved = localStorage.getItem('top_laptop_commercial_documents_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return reconcileFacturesWithReceipts(parsed);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  });
+
+  // 11. B2B Customers Database (loaded immediately from local cache, then hydrated from real server API)
+  const [customers, setCustomers] = useState<CustomerRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('top_laptop_customers_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  });
+  const [customersDbSource, setCustomersDbSource] = useState<CustomerDbSource>('server-json-db');
+
+  const refreshCustomersFromDb = React.useCallback(async () => {
+    const res = await fetchCustomersFromDatabase();
+    setCustomers(res.customers);
+    setCustomersDbSource(res.source);
+  }, []);
 
   // Keep browser document title synced with storeName
   useEffect(() => {
@@ -395,6 +575,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (remote.settings && typeof remote.settings === 'object') {
       const { normalized, migratedLegacyPhone } = normalizeStoreSettings(remote.settings);
       setSettings(normalized);
+      saveSiteConfigToStorage({
+        storeName: normalized.storeName,
+        phone: normalized.contactPhone,
+        whatsappNumber: normalized.whatsappNumber,
+        whatsappUrl: normalized.socialLinks?.whatsapp,
+        email: normalized.contactEmail,
+        address: normalized.storeAddress,
+        facebook: normalized.socialLinks?.facebook,
+        instagram: normalized.socialLinks?.instagram,
+        tiktok: normalized.socialLinks?.tiktok,
+        youtube: normalized.socialLinks?.youtube,
+        linkedin: normalized.socialLinks?.linkedin,
+      });
       if (migratedLegacyPhone) {
         persistStoreKey('settings', normalized, true);
       }
@@ -406,7 +599,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setDeliveryCompanies(remote.deliveryCompanies);
     }
     if (Array.isArray(remote.employees) && remote.employees.length > 0) {
-      setEmployees(remote.employees);
+      const { employees: migrated } = migrateEmployeesDocPermissions(remote.employees);
+      setEmployees(migrated);
     }
     if (Array.isArray(remote.orders)) {
       setOrders((prev) => mergeOrdersById(prev, remote.orders));
@@ -417,6 +611,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (Array.isArray(remote.activityLogs)) {
       setActivityLogs(remote.activityLogs);
     }
+    if (remote.documentSettings && typeof remote.documentSettings === 'object') {
+      setDocumentSettings(normalizeDocumentSettings(remote.documentSettings, remote.settings || settings));
+    }
+    if (Array.isArray(remote.commercialDocuments)) {
+      setCommercialDocuments((prev) => reconcileFacturesWithReceipts(mergeOrdersById(prev, remote.commercialDocuments)));
+    }
   }, []);
 
   // Hydrate from Netlify Cloud Blobs & IndexedDB on startup, window focus, & live polling
@@ -426,6 +626,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const runHydration = () => {
       if (!isMounted) return;
       refreshFromCloud().catch(() => {});
+      refreshCustomersFromDb().catch(() => {});
     };
 
     runHydration();
@@ -476,6 +677,25 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return next;
     });
   };
+
+  // Keep the logged-in session in sync with the employees list, so renaming an
+  // employee (or changing permissions) is reflected immediately and is not
+  // overwritten by the stale snapshot saved at login time.
+  useEffect(() => {
+    if (!currentEmployee) return;
+    const fresh = employees.find(e => e.id === currentEmployee.id);
+    if (!fresh) return;
+    const changed =
+      fresh.name !== currentEmployee.name ||
+      fresh.role !== currentEmployee.role ||
+      fresh.isActive !== currentEmployee.isActive ||
+      JSON.stringify(fresh.customPermissions || []) !== JSON.stringify(currentEmployee.customPermissions || []);
+    if (changed) {
+      const merged = { ...currentEmployee, ...fresh, lastLoginAt: currentEmployee.lastLoginAt };
+      setCurrentEmployee(merged);
+      safeLocalStorageSet('top_laptop_current_employee', merged);
+    }
+  }, [employees, currentEmployee]);
 
   // RBAC Permission Checker
   const hasPermission = (permission: EmployeePermission): boolean => {
@@ -893,7 +1113,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       deliveryCompanies,
       employees,
       inventoryMovements,
-      settings
+      settings,
+      commercialDocuments,
+      documentSettings,
+      customers
     };
 
     const dataJson = JSON.stringify(snapshot);
@@ -902,13 +1125,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const newBackup: DatabaseBackup = {
       id: 'bkp-' + Date.now().toString(36),
       timestamp: new Date().toISOString(),
-      version: '2.0.0',
+      version: '2.2.0',
       dataHash: hash,
       summary: {
         productsCount: products.length,
         ordersCount: orders.length,
         employeesCount: employees.length,
-        deliveryCompaniesCount: deliveryCompanies.length
+        deliveryCompaniesCount: deliveryCompanies.length,
+        documentsCount: commercialDocuments.length,
+        customersCount: customers.length
       },
       dataJson
     };
@@ -930,18 +1155,34 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setOrders(parsed.orders);
         if (parsed.wilayas) setWilayas(parsed.wilayas);
         if (parsed.deliveryCompanies) setDeliveryCompanies(parsed.deliveryCompanies);
-        if (parsed.employees) setEmployees(parsed.employees);
+        if (parsed.employees) setEmployees(migrateEmployeesDocPermissions(parsed.employees).employees);
         if (parsed.inventoryMovements) setInventoryMovements(parsed.inventoryMovements);
         if (parsed.settings) setSettings(parsed.settings);
+        if (Array.isArray(parsed.commercialDocuments)) {
+          setCommercialDocuments(reconcileFacturesWithReceipts(parsed.commercialDocuments));
+        }
+        if (parsed.documentSettings) {
+          setDocumentSettings(normalizeDocumentSettings(parsed.documentSettings, parsed.settings));
+        }
+        if (Array.isArray(parsed.customers)) {
+          setCustomers(parsed.customers);
+        }
 
         persistStoreBatch({
           products: parsed.products,
           orders: parsed.orders,
           wilayas: parsed.wilayas,
           deliveryCompanies: parsed.deliveryCompanies,
-          employees: parsed.employees,
+          employees: parsed.employees ? migrateEmployeesDocPermissions(parsed.employees).employees : undefined,
           inventoryMovements: parsed.inventoryMovements,
           settings: parsed.settings,
+          commercialDocuments: Array.isArray(parsed.commercialDocuments)
+            ? reconcileFacturesWithReceipts(parsed.commercialDocuments)
+            : undefined,
+          documentSettings: parsed.documentSettings
+            ? normalizeDocumentSettings(parsed.documentSettings, parsed.settings)
+            : undefined,
+          customers: Array.isArray(parsed.customers) ? parsed.customers : undefined,
         });
 
         logActivity('BACKUP_RESTORE', 'Restauration complète de la base de données réussie');
@@ -953,34 +1194,71 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return false;
   };
 
-  const updateSettings = (newSettings: Partial<StoreSettings>) => {
-    setSettings(prev => {
-      const merged = {
-        ...prev,
-        ...newSettings,
-        socialLinks: {
-          ...prev.socialLinks,
-          ...(newSettings.socialLinks || {}),
-        },
-      };
-      const effectiveWhatsapp =
-        merged.whatsappNumber?.trim() || merged.contactPhone?.trim() || OFFICIAL_PHONE_LOCAL;
-      const effectiveContactPhone =
-        merged.contactPhone?.trim() || merged.whatsappNumber?.trim() || OFFICIAL_PHONE_LOCAL;
+  const updateSettings = async (
+    newSettings: Partial<StoreSettings>
+  ): Promise<{ savedLocal: boolean; syncedCloud: boolean }> => {
+    const prev = settingsRef.current;
+    const merged = {
+      ...prev,
+      ...newSettings,
+      socialLinks: {
+        ...prev.socialLinks,
+        ...(newSettings.socialLinks || {}),
+      },
+    };
+    const effectiveWhatsapp =
+      merged.whatsappNumber?.trim() || merged.contactPhone?.trim() || OFFICIAL_PHONE_LOCAL;
+    const effectiveContactPhone =
+      merged.contactPhone?.trim() || merged.whatsappNumber?.trim() || OFFICIAL_PHONE_LOCAL;
 
-      const next: StoreSettings = {
-        ...merged,
-        whatsappNumber: effectiveWhatsapp,
-        contactPhone: effectiveContactPhone,
-        socialLinks: {
-          ...merged.socialLinks,
-          whatsapp: buildWhatsAppUrl(effectiveWhatsapp),
-        },
-      };
-      persistStoreKey('settings', next, true);
-      return next;
+    const next: StoreSettings = {
+      ...merged,
+      whatsappNumber: effectiveWhatsapp,
+      contactPhone: effectiveContactPhone,
+      socialLinks: {
+        ...merged.socialLinks,
+        whatsapp: buildWhatsAppUrl(effectiveWhatsapp),
+      },
+    };
+
+    settingsRef.current = next;
+    setSettings(next);
+
+    // 1. Persist immediately into central siteConfig storage
+    saveSiteConfigToStorage({
+      storeName: next.storeName,
+      phone: next.contactPhone,
+      whatsappNumber: next.whatsappNumber,
+      whatsappUrl: next.socialLinks.whatsapp,
+      email: next.contactEmail,
+      address: next.storeAddress,
+      facebook: next.socialLinks.facebook,
+      instagram: next.socialLinks.instagram,
+      tiktok: next.socialLinks.tiktok,
+      youtube: next.socialLinks.youtube,
+      linkedin: next.socialLinks.linkedin,
     });
-    logActivity('THEME_CHANGE', 'Mise à jour des paramètres de la boutique');
+
+    // 2. Persist into localStorage, IndexedDB, and Netlify Cloud Blobs with dirty-key protection
+    const status = await persistStoreKeyWithAck('settings', next);
+
+    // 3. Keep Documents company header synced with Store Settings (name, phone, email, address, RC, NIF)
+    setDocumentSettings((prevDocSettings) => {
+      const syncedDocSettings: DocumentCompanySettings = {
+        ...prevDocSettings,
+        companyName: next.storeName || prevDocSettings.companyName,
+        address: next.storeAddress || prevDocSettings.address,
+        phone: next.contactPhone || next.whatsappNumber || prevDocSettings.phone,
+        email: next.contactEmail || prevDocSettings.email,
+        rc: next.tradeRegisterRC ?? prevDocSettings.rc,
+        nif: next.taxNumberNIF ?? prevDocSettings.nif,
+      };
+      persistStoreKey('documentSettings', syncedDocSettings, true);
+      return syncedDocSettings;
+    });
+
+    logActivity('THEME_CHANGE', 'Mise à jour des paramètres de contact et boutique');
+    return status;
   };
 
   const resetToDemoCatalog = () => {
@@ -995,6 +1273,439 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       employees: INITIAL_EMPLOYEES,
     });
     logActivity('PRODUCT_UPDATE', 'Réinitialisation complète du catalogue et données de démonstration');
+  };
+
+  // ==========================================
+  // COMMERCIAL DOCUMENTS OPERATIONS (WITH RBAC & VALIDATION)
+  // ==========================================
+  const syncLinkedOrdersPaymentFromDocs = (docs: CommercialDocument[]) => {
+    const paidOrderIds = new Set(
+      docs
+        .filter((d) => d.type === 'facture' && d.status === 'paid' && d.orderId)
+        .map((d) => d.orderId!)
+    );
+    if (paidOrderIds.size > 0) {
+      setOrders((prevOrders) => {
+        let modified = false;
+        const nextOrders = prevOrders.map((ord) => {
+          if (paidOrderIds.has(ord.id) && ord.paymentStatus !== 'paid') {
+            modified = true;
+            return { ...ord, paymentStatus: 'paid' as const, updatedAt: new Date().toISOString() };
+          }
+          return ord;
+        });
+        if (modified) {
+          persistStoreKey('orders', nextOrders, true);
+          return nextOrders;
+        }
+        return prevOrders;
+      });
+    }
+  };
+
+  const createCommercialDocument = (
+    draft: Omit<CommercialDocument, 'id' | 'number' | 'sequenceNumber' | 'year' | 'createdAt'>,
+    issueImmediately = false
+  ): { ok: true; document: CommercialDocument } | { ok: false; errors: string[] } => {
+    const requiredPerm = getPermissionForDocType(draft.type);
+    if (!hasPermission(requiredPerm)) {
+      return {
+        ok: false,
+        errors: ['Permission refusée : votre rôle ne permet pas de créer ce type de document.'],
+      };
+    }
+
+    const docDate = draft.date || new Date().toISOString().slice(0, 10);
+    const year = Number(docDate.slice(0, 4)) || new Date().getFullYear();
+
+    const { number, sequenceNumber, nextCounterValue } = generateNextDocumentNumber(
+      draft.type,
+      year,
+      documentSettings,
+      commercialDocuments
+    );
+
+    const totals = recalculateDocumentTotals({
+      lines: draft.lines || [],
+      tvaRate: draft.tvaRate,
+      deliveryFeeDZD: draft.deliveryFeeDZD,
+      applyTimbre: Boolean(draft.applyTimbre),
+      settings: documentSettings,
+      type: draft.type,
+      paymentAmountDZD: draft.paymentAmountDZD,
+    });
+
+    const initialStatus = issueImmediately
+      ? draft.type === 'bl'
+        ? 'prepared'
+        : draft.type === 'receipt'
+        ? 'paid'
+        : 'issued'
+      : 'draft';
+
+    const newDoc: CommercialDocument = {
+      ...draft,
+      id: 'doc-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6),
+      number,
+      year,
+      sequenceNumber,
+      date: docDate,
+      status: initialStatus,
+      lines: totals.lines,
+      subtotalDZD: totals.subtotalDZD,
+      discountTotalDZD: totals.discountTotalDZD,
+      netHtDZD: totals.netHtDZD,
+      tvaRate: totals.tvaRate,
+      tvaAmountDZD: totals.tvaAmountDZD,
+      timbreAmountDZD: totals.timbreAmountDZD,
+      deliveryFeeDZD: totals.deliveryFeeDZD,
+      totalDZD: totals.totalDZD,
+      amountPaidDZD: draft.type === 'facture' ? 0 : draft.amountPaidDZD,
+      remainingAmountDZD: draft.type === 'facture' ? totals.totalDZD : draft.remainingAmountDZD,
+      paymentAmountDZD: draft.type === 'receipt' ? totals.totalDZD : draft.paymentAmountDZD,
+      createdBy: currentEmployee?.name || draft.createdBy || 'Administrateur',
+      createdByEmployeeId: currentEmployee?.id || draft.createdByEmployeeId,
+      createdAt: new Date().toISOString(),
+      issuedAt: issueImmediately ? new Date().toISOString() : undefined,
+    };
+
+    const validationErrors = validateCommercialDocumentInput(newDoc, commercialDocuments);
+    if (validationErrors.length > 0) {
+      return { ok: false, errors: validationErrors };
+    }
+
+    const reconciled = reconcileFacturesWithReceipts([newDoc, ...commercialDocuments]);
+    const finalCreated = reconciled.find((d) => d.id === newDoc.id) || newDoc;
+
+    const counterKey = getCounterKey(draft.type, year);
+    const nextDocSettings: DocumentCompanySettings = {
+      ...documentSettings,
+      counters: {
+        ...documentSettings.counters,
+        [counterKey]: nextCounterValue,
+      },
+    };
+
+    setCommercialDocuments(reconciled);
+    setDocumentSettings(nextDocSettings);
+    persistStoreBatch({
+      commercialDocuments: reconciled,
+      documentSettings: nextDocSettings,
+    });
+    syncLinkedOrdersPaymentFromDocs(reconciled);
+
+    logActivity(
+      issueImmediately ? 'DOCUMENT_ISSUE' : 'DOCUMENT_CREATE',
+      `${issueImmediately ? 'Émission' : 'Création brouillon'} ${newDoc.number} (${newDoc.customer.name})`,
+      newDoc.id
+    );
+
+    return { ok: true, document: finalCreated };
+  };
+
+  const updateDraftDocument = (
+    docId: string,
+    patch: Partial<CommercialDocument>
+  ): { ok: true; document: CommercialDocument } | { ok: false; errors: string[] } => {
+    const existing = commercialDocuments.find((d) => d.id === docId);
+    if (!existing) {
+      return { ok: false, errors: ['Document introuvable.'] };
+    }
+    if (!hasPermission(getPermissionForDocType(existing.type))) {
+      return { ok: false, errors: ['Permission refusée pour modifier ce document.'] };
+    }
+    if (existing.status !== 'draft') {
+      return {
+        ok: false,
+        errors: [
+          `Le document ${existing.number} est déjà émis et verrouillé. Annulez-le et réémettez un nouveau document.`,
+        ],
+      };
+    }
+
+    const mergedLines = patch.lines ?? existing.lines;
+    const totals = recalculateDocumentTotals({
+      lines: mergedLines,
+      tvaRate: patch.tvaRate ?? existing.tvaRate,
+      deliveryFeeDZD: patch.deliveryFeeDZD ?? existing.deliveryFeeDZD,
+      applyTimbre: patch.applyTimbre ?? Boolean(existing.applyTimbre),
+      settings: documentSettings,
+      type: existing.type,
+      paymentAmountDZD: patch.paymentAmountDZD ?? existing.paymentAmountDZD,
+    });
+
+    const updatedDoc: CommercialDocument = {
+      ...existing,
+      ...patch,
+      id: existing.id,
+      type: existing.type,
+      number: existing.number,
+      year: existing.year,
+      sequenceNumber: existing.sequenceNumber,
+      status: 'draft',
+      lines: totals.lines,
+      subtotalDZD: totals.subtotalDZD,
+      discountTotalDZD: totals.discountTotalDZD,
+      netHtDZD: totals.netHtDZD,
+      tvaRate: totals.tvaRate,
+      tvaAmountDZD: totals.tvaAmountDZD,
+      timbreAmountDZD: totals.timbreAmountDZD,
+      deliveryFeeDZD: totals.deliveryFeeDZD,
+      totalDZD: totals.totalDZD,
+      remainingAmountDZD: existing.type === 'facture' ? totals.totalDZD : existing.remainingAmountDZD,
+      paymentAmountDZD: existing.type === 'receipt' ? totals.totalDZD : existing.paymentAmountDZD,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const errors = validateCommercialDocumentInput(updatedDoc, commercialDocuments, { isEdit: true });
+    if (errors.length > 0) {
+      return { ok: false, errors };
+    }
+
+    const nextDocs = commercialDocuments.map((d) => (d.id === docId ? updatedDoc : d));
+    setCommercialDocuments(nextDocs);
+    persistStoreKey('commercialDocuments', nextDocs, true);
+    logActivity('DOCUMENT_UPDATE', `Mise à jour brouillon ${updatedDoc.number}`, docId);
+
+    return { ok: true, document: updatedDoc };
+  };
+
+  const issueCommercialDocument = (
+    docId: string
+  ): { ok: true; document: CommercialDocument } | { ok: false; errors: string[] } => {
+    const existing = commercialDocuments.find((d) => d.id === docId);
+    if (!existing) {
+      return { ok: false, errors: ['Document introuvable.'] };
+    }
+    if (!hasPermission(getPermissionForDocType(existing.type))) {
+      return { ok: false, errors: ['Permission refusée pour émettre ce document.'] };
+    }
+    if (existing.status !== 'draft') {
+      return { ok: false, errors: [`Le document ${existing.number} est déjà émis.`] };
+    }
+
+    const nextStatus =
+      existing.type === 'bl' ? 'prepared' : existing.type === 'receipt' ? 'paid' : 'issued';
+
+    const issuedDoc: CommercialDocument = {
+      ...existing,
+      status: nextStatus,
+      issuedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const errors = validateCommercialDocumentInput(issuedDoc, commercialDocuments);
+    if (errors.length > 0) {
+      return { ok: false, errors };
+    }
+
+    const rawNext = commercialDocuments.map((d) => (d.id === docId ? issuedDoc : d));
+    const reconciled = reconcileFacturesWithReceipts(rawNext);
+    const finalDoc = reconciled.find((d) => d.id === docId) || issuedDoc;
+
+    setCommercialDocuments(reconciled);
+    persistStoreKey('commercialDocuments', reconciled, true);
+    syncLinkedOrdersPaymentFromDocs(reconciled);
+
+    logActivity('DOCUMENT_ISSUE', `Émission officielle du document ${issuedDoc.number}`, docId);
+    return { ok: true, document: finalDoc };
+  };
+
+  const updateBLStatus = (
+    docId: string,
+    status: 'prepared' | 'delivered' | 'returned'
+  ): { ok: true; document: CommercialDocument } | { ok: false; errors: string[] } => {
+    const existing = commercialDocuments.find((d) => d.id === docId);
+    if (!existing || existing.type !== 'bl') {
+      return { ok: false, errors: ['Bon de livraison introuvable.'] };
+    }
+    if (!hasPermission('issue_bl')) {
+      return { ok: false, errors: ['Permission refusée : rôle Expéditions requis.'] };
+    }
+    if (existing.status === 'draft' || existing.status === 'cancelled') {
+      return { ok: false, errors: ['Émettez d’abord le BL avant de changer son statut de livraison.'] };
+    }
+
+    const updated: CommercialDocument = {
+      ...existing,
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+    const nextDocs = commercialDocuments.map((d) => (d.id === docId ? updated : d));
+    setCommercialDocuments(nextDocs);
+    persistStoreKey('commercialDocuments', nextDocs, true);
+    logActivity('DOCUMENT_UPDATE', `Statut BL ${updated.number} -> ${status}`, docId);
+    return { ok: true, document: updated };
+  };
+
+  const cancelCommercialDocument = (
+    docId: string,
+    reason?: string
+  ): { ok: true; document: CommercialDocument } | { ok: false; errors: string[] } => {
+    const existing = commercialDocuments.find((d) => d.id === docId);
+    if (!existing) {
+      return { ok: false, errors: ['Document introuvable.'] };
+    }
+    if (
+      !hasPermission(getPermissionForDocType(existing.type)) &&
+      !hasPermission('cancel_documents')
+    ) {
+      return { ok: false, errors: ['Permission refusée pour annuler ce document.'] };
+    }
+    if (existing.status === 'cancelled') {
+      return { ok: false, errors: ['Ce document est déjà annulé.'] };
+    }
+
+    const cancelled: CommercialDocument = {
+      ...existing,
+      status: 'cancelled',
+      cancelledAt: new Date().toISOString(),
+      cancelReason: reason?.trim() || 'Annulé par opérateur',
+      updatedAt: new Date().toISOString(),
+    };
+
+    const rawNext = commercialDocuments.map((d) => (d.id === docId ? cancelled : d));
+    const reconciled = reconcileFacturesWithReceipts(rawNext);
+    setCommercialDocuments(reconciled);
+    persistStoreKey('commercialDocuments', reconciled, true);
+    logActivity('DOCUMENT_CANCEL', `Annulation du document ${cancelled.number}${reason ? ` (${reason})` : ''}`, docId);
+    return { ok: true, document: cancelled };
+  };
+
+  const duplicateCommercialDocument = (
+    docId: string
+  ): { ok: true; document: CommercialDocument } | { ok: false; errors: string[] } => {
+    const source = commercialDocuments.find((d) => d.id === docId);
+    if (!source) {
+      return { ok: false, errors: ['Document source introuvable.'] };
+    }
+    const draft = buildConvertedDraft(source, source.type, documentSettings, currentEmployee);
+    // Keep same doc type without overriding sourceDocumentId unless desired
+    return createCommercialDocument(
+      {
+        ...draft,
+        sourceDocumentId: undefined,
+        sourceDocumentNumber: undefined,
+      },
+      false
+    );
+  };
+
+  const convertCommercialDocument = (
+    sourceId: string,
+    targetType: CommercialDocType,
+    issueImmediately = false
+  ): { ok: true; document: CommercialDocument } | { ok: false; errors: string[] } => {
+    const source = commercialDocuments.find((d) => d.id === sourceId);
+    if (!source) {
+      return { ok: false, errors: ['Document source introuvable.'] };
+    }
+    if (source.status === 'cancelled') {
+      return { ok: false, errors: ['Impossible de convertir un document annulé.'] };
+    }
+    if (!hasPermission(getPermissionForDocType(targetType))) {
+      return { ok: false, errors: ['Permission refusée pour créer ce document cible.'] };
+    }
+
+    const draft = buildConvertedDraft(source, targetType, documentSettings, currentEmployee);
+    const result = createCommercialDocument(draft, issueImmediately);
+    if (result.ok) {
+      logActivity(
+        'DOCUMENT_CONVERT',
+        `Conversion ${source.number} -> ${result.document.number}`,
+        result.document.id
+      );
+    }
+    return result;
+  };
+
+  const updateDocumentSettings = (patch: Partial<DocumentCompanySettings>) => {
+    if (!hasPermission('manage_document_settings')) return;
+    setDocumentSettings((prev) => {
+      const next: DocumentCompanySettings = {
+        ...prev,
+        ...patch,
+        prefixes: {
+          ...prev.prefixes,
+          ...(patch.prefixes || {}),
+        },
+        counters: {
+          ...prev.counters,
+          ...(patch.counters || {}),
+        },
+      };
+      persistStoreKey('documentSettings', next, true);
+      return next;
+    });
+    logActivity('DOCUMENT_SETTINGS_UPDATE', 'Mise à jour des paramètres Documents & Fiscalité');
+  };
+
+  const resetDocumentCounter = (type: CommercialDocType, year: number, nextValue: number) => {
+    if (!hasPermission('manage_document_settings')) return;
+    const key = getCounterKey(type, year);
+    const safeVal = Math.max(0, Math.floor(Number(nextValue) || 0));
+    setDocumentSettings((prev) => {
+      const next: DocumentCompanySettings = {
+        ...prev,
+        counters: {
+          ...prev.counters,
+          [key]: safeVal,
+        },
+      };
+      persistStoreKey('documentSettings', next, true);
+      return next;
+    });
+    logActivity(
+      'DOCUMENT_SETTINGS_UPDATE',
+      `Compteur de numérotation ${type.toUpperCase()} (${year}) réinitialisé à ${safeVal}`
+    );
+  };
+
+  // ==========================================
+  // B2B CUSTOMERS DATABASE CRUD (API + DB PERSISTENT)
+  // ==========================================
+  const createCustomerRecord = async (
+    input: Omit<CustomerRecord, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<{ ok: true; customer: CustomerRecord } | { ok: false; errors: string[] }> => {
+    if (!hasPermission('manage_customers')) {
+      return { ok: false, errors: ['Permission refusée : accès à la base clients requis.'] };
+    }
+    const res = await createCustomerInDatabase(input);
+    if (!res.ok) return res;
+    setCustomers(res.customers);
+    setCustomersDbSource(res.source);
+    logActivity('CUSTOMER_CREATE', `Ajout client B2B ${res.customer.companyName}`, res.customer.id);
+    return { ok: true, customer: res.customer };
+  };
+
+  const updateCustomerRecord = async (
+    id: string,
+    input: Omit<CustomerRecord, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<{ ok: true; customer: CustomerRecord } | { ok: false; errors: string[] }> => {
+    if (!hasPermission('manage_customers')) {
+      return { ok: false, errors: ['Permission refusée : accès à la base clients requis.'] };
+    }
+    const res = await updateCustomerInDatabase(id, input);
+    if (!res.ok) return res;
+    setCustomers(res.customers);
+    setCustomersDbSource(res.source);
+    logActivity('CUSTOMER_UPDATE', `Mise à jour client B2B ${res.customer.companyName}`, res.customer.id);
+    return { ok: true, customer: res.customer };
+  };
+
+  const deleteCustomerRecord = async (
+    id: string
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    if (!hasPermission('manage_customers')) {
+      return { ok: false, error: 'Permission refusée : accès à la base clients requis.' };
+    }
+    const existing = customers.find((c) => c.id === id);
+    const res = await deleteCustomerFromDatabase(id);
+    if (!res.ok) return res;
+    setCustomers(res.customers);
+    setCustomersDbSource(res.source);
+    logActivity('CUSTOMER_DELETE', `Suppression client B2B ${existing?.companyName || id}`, id);
+    return { ok: true };
   };
 
   return (
@@ -1033,7 +1744,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         restoreDatabaseBackup,
         updateSettings,
         resetToDemoCatalog,
-        refreshFromCloud
+        refreshFromCloud,
+        commercialDocuments,
+        documentSettings,
+        createCommercialDocument,
+        updateDraftDocument,
+        issueCommercialDocument,
+        updateBLStatus,
+        cancelCommercialDocument,
+        duplicateCommercialDocument,
+        convertCommercialDocument,
+        updateDocumentSettings,
+        resetDocumentCounter,
+        customers,
+        customersDbSource,
+        refreshCustomersFromDb,
+        createCustomerRecord,
+        updateCustomerRecord,
+        deleteCustomerRecord
       }}
     >
       {children}

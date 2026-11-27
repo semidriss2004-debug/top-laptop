@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
+import { handleCustomersApiRequest } from './server/customersApi.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,7 +21,10 @@ const mimeTypes = {
   '.ico': 'image/x-icon'
 };
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
+  if (await handleCustomersApiRequest(req, res, __dirname)) {
+    return;
+  }
   let cleanUrl = req.url.split('?')[0];
   let targetFile = cleanUrl === '/' ? 'index.html' : cleanUrl.replace(/^\//, '');
   let filePath = path.join(distDir, targetFile);

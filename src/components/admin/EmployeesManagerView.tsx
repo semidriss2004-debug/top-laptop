@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { Employee, EmployeeRole, EmployeePermission } from '../../types';
+import { getDefaultDocPermissionsForRole } from '../../utils/commercialDocuments';
 import { 
   Users, 
   UserPlus, 
@@ -16,9 +17,10 @@ const ALL_ROLES: { role: EmployeeRole; labelFr: string; labelAr: string; desc: s
   { role: 'SUPER_ADMIN', labelFr: 'Super Administrateur', labelAr: 'المدير العام', desc: 'Accès total à l\'ensemble du système et des sauvegardes' },
   { role: 'MANAGER', labelFr: 'Directeur d\'Opérations', labelAr: 'مدير العمليات', desc: 'Gestion globale de la boutique, commandes et clients' },
   { role: 'PRODUCT_MANAGER', labelFr: 'Gestionnaire Catalogue', labelAr: 'مسؤول المنتجات', desc: 'Gestion des PC, logiciels numériques, stocks et licences' },
-  { role: 'ACCOUNTANT', labelFr: 'Comptable & Finance', labelAr: 'المحاسب المالي', desc: 'Accès aux prix d\'achat, bénéfices nets et bilans financiers' },
-  { role: 'DELIVERY_MANAGER', labelFr: 'Responsable Expéditions', labelAr: 'مسؤول الشحن والتوصيل', desc: 'Gestion des transporteurs, wilayas et expéditions' },
-  { role: 'SALES_AGENT', labelFr: 'Conseiller Commercial', labelAr: 'مسؤول المبيعات', desc: 'Validation des commandes et suivi client WhatsApp' }
+  { role: 'ACCOUNTANT', labelFr: 'Comptable & Finance', labelAr: 'المحاسب المالي', desc: 'Accès aux prix d\'achat, bénéfices nets, factures et bilans financiers' },
+  { role: 'DELIVERY_MANAGER', labelFr: 'Responsable Expéditions', labelAr: 'مسؤول الشحن والتوصيل', desc: 'Gestion des transporteurs, wilayas et Bons de Livraison (BL)' },
+  { role: 'CASHIER', labelFr: 'Caissier / Encaissement', labelAr: 'أمين الصندوق', desc: 'Émission des Reçus de paiement et suivi des encaissements' },
+  { role: 'SALES_AGENT', labelFr: 'Conseiller Commercial', labelAr: 'مسؤول المبيعات', desc: 'Validation des commandes, Proformas et suivi client WhatsApp' }
 ];
 
 const ALL_PERMISSIONS: { perm: EmployeePermission; label: string }[] = [
@@ -30,7 +32,15 @@ const ALL_PERMISSIONS: { perm: EmployeePermission; label: string }[] = [
   { perm: 'manage_employees', label: 'Gestion des employés et rôles' },
   { perm: 'manage_inventory', label: 'Mouvements d\'inventaire détaillés' },
   { perm: 'manage_backups', label: 'Sauvegardes et restauration' },
-  { perm: 'manage_settings', label: 'Configuration générale de la boutique' }
+  { perm: 'manage_settings', label: 'Configuration générale de la boutique' },
+  { perm: 'view_documents', label: 'Documents : Consulter le module Documents' },
+  { perm: 'issue_bl', label: 'Documents : Créer & émettre des Bons de livraison (BL)' },
+  { perm: 'issue_proforma', label: 'Documents : Créer & émettre des Factures proforma' },
+  { perm: 'issue_facture', label: 'Documents : Créer & émettre des Factures' },
+  { perm: 'issue_receipt', label: 'Documents : Créer & émettre des Reçus de paiement' },
+  { perm: 'cancel_documents', label: 'Documents : Annuler un document émis' },
+  { perm: 'manage_document_settings', label: 'Documents : Paramètres légaux & numérotation' },
+  { perm: 'manage_customers', label: 'Base de données Clients B2B (Magasins & Entreprises)' }
 ];
 
 export const EmployeesManagerView: React.FC = () => {
@@ -324,7 +334,23 @@ export const EmployeesManagerView: React.FC = () => {
                 <label className="text-slate-300 font-bold block mb-1">Rôle Principal (RBAC) *</label>
                 <select
                   value={role}
-                  onChange={(e) => setRole(e.target.value as EmployeeRole)}
+                  onChange={(e) => {
+                    const nextRole = e.target.value as EmployeeRole;
+                    setRole(nextRole);
+                    if (!editingEmployee) {
+                      const docDefaults = getDefaultDocPermissionsForRole(nextRole);
+                      const baseByRole: Record<EmployeeRole, EmployeePermission[]> = {
+                        SUPER_ADMIN: ALL_PERMISSIONS.map(x => x.perm),
+                        MANAGER: ALL_PERMISSIONS.filter(x => x.perm !== 'manage_backups').map(x => x.perm),
+                        PRODUCT_MANAGER: ['manage_products', 'manage_inventory'],
+                        ACCOUNTANT: ['view_costs_profits', 'view_analytics', 'manage_orders'],
+                        DELIVERY_MANAGER: ['manage_delivery', 'manage_orders'],
+                        CASHIER: [],
+                        SALES_AGENT: ['manage_orders']
+                      };
+                      setPermissions(Array.from(new Set([...baseByRole[nextRole], ...docDefaults])));
+                    }
+                  }}
                   className="w-full bg-[#050A14] text-white rounded-xl px-3 py-2.5 border border-blue-900/60"
                 >
                   {ALL_ROLES.map(r => (

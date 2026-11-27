@@ -33,11 +33,11 @@ export function isLegacyDemoPhone(val?: string | null): boolean {
  * - "00213557526420" -> "213557526420"
  */
 export function formatWhatsAppNumber(rawPhone?: string | null): string {
-  const source = !rawPhone || isLegacyDemoPhone(rawPhone) ? OFFICIAL_PHONE_LOCAL : rawPhone;
+  const source = rawPhone && rawPhone.trim() ? rawPhone.trim() : OFFICIAL_PHONE_LOCAL;
   // Take first phone number if separated by "/" or "|" or ","
   const primarySegment = source.split(/[\/|,]/)[0] || source;
 
-  // If it's already a full wa.me link, extract digits from it
+  // Extract pure digits (works for raw phone numbers or pasted https://wa.me/213... URLs)
   let digits = primarySegment.replace(/[^0-9]/g, '');
 
   if (!digits) {
@@ -81,7 +81,7 @@ export function buildWhatsAppUrl(rawPhone?: string | null, message?: string): st
  * - "+213 557 52 64 20" -> "tel:+213557526420"
  */
 export function buildTelUrl(rawPhone?: string | null): string {
-  const source = !rawPhone || isLegacyDemoPhone(rawPhone) ? OFFICIAL_PHONE_LOCAL : rawPhone;
+  const source = rawPhone && rawPhone.trim() ? rawPhone.trim() : OFFICIAL_PHONE_LOCAL;
   const primarySegment = (source.split(/[\/|,]/)[0] || source).trim();
   const hasPlus = primarySegment.startsWith('+');
   const digits = primarySegment.replace(/[^0-9]/g, '');

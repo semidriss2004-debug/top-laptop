@@ -4,7 +4,8 @@ import { useLanguage } from '../context/LanguageContext';
 import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
 import { useStore } from '../context/StoreContext';
-import { buildTelUrl, buildWhatsAppUrl } from '../utils/contactLinks';
+import { buildTelUrl } from '../utils/contactLinks';
+import { getEffectiveSiteConfig } from '../config/siteConfig';
 import { trackContact } from '../utils/metaPixel';
 import { 
   ShoppingCart, 
@@ -28,6 +29,7 @@ import {
 interface HeaderProps {
   onOpenAdmin: () => void;
   onOpenTracking: () => void;
+  onOpenContact?: () => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   selectedCategory: string;
@@ -40,6 +42,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onOpenAdmin,
   onOpenTracking,
+  onOpenContact,
   searchQuery,
   setSearchQuery,
   selectedCategory,
@@ -54,9 +57,10 @@ export const Header: React.FC<HeaderProps> = ({
   const { products, settings } = useStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const displayPhone = settings.contactPhone || settings.whatsappNumber || '0557526420';
-  const telHref = buildTelUrl(displayPhone);
-  const whatsappHref = buildWhatsAppUrl(settings.whatsappNumber || displayPhone);
+  const siteConfig = getEffectiveSiteConfig(settings);
+  const displayPhone = siteConfig.phone;
+  const telHref = buildTelUrl(siteConfig.phone);
+  const whatsappHref = siteConfig.whatsappUrl;
 
   const handlePickCategory = (cat: string, cond?: string) => {
     setSelectedCategory(cat);
@@ -116,6 +120,18 @@ export const Header: React.FC<HeaderProps> = ({
               <MessageCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
               <span>WhatsApp</span>
             </a>
+
+            {onOpenContact && (
+              <>
+                <span className="hidden sm:inline text-slate-600">|</span>
+                <button
+                  onClick={onOpenContact}
+                  className="hidden sm:flex items-center gap-1 text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+                >
+                  <span>{language === 'ar' ? 'اتصل بنا' : 'Contact'}</span>
+                </button>
+              </>
+            )}
 
             <span className="text-slate-600">|</span>
 

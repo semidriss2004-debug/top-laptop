@@ -3,6 +3,7 @@ import { Order } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useStore } from '../context/StoreContext';
 import { buildWhatsAppUrl } from '../utils/contactLinks';
+import { getEffectiveSiteConfig } from '../config/siteConfig';
 import { trackContact } from '../utils/metaPixel';
 import { 
   CheckCircle2, 
@@ -30,13 +31,14 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({ 
   const formatPrice = (price: number) => price.toLocaleString('fr-DZ') + ' ' + t('dzd');
 
   const handleSendWhatsAppSlip = () => {
+    const siteConfig = getEffectiveSiteConfig(settings);
     trackContact('whatsapp', `Order ${order.id}`);
     const itemsList = order.items
       .map(i => `• ${i.name} (x${i.quantity}) - ${formatPrice(i.priceDZD * i.quantity)}`)
       .join('\n');
 
     const message = language === 'ar'
-      ? `*طلب جديد من ${settings.storeName || 'TOP LAPTOP الجزائر'}*\n` +
+      ? `*طلب جديد من ${siteConfig.storeName}*\n` +
         `--------------------------------\n` +
         `*رقم الطلب:* ${order.id}\n` +
         `*الاسم:* ${order.customerName}\n` +
@@ -48,7 +50,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({ 
         `*مصاريف الشحن (69 ولاية):* ${formatPrice(order.deliveryFeeDZD)}\n` +
         `*المجموع الكلي:* ${formatPrice(order.totalDZD)}\n` +
         `*طريقة الدفع:* ${order.paymentMethod === 'cod' ? 'الدفع عند الاستلام' : 'واتساب مباشر'}`
-      : `*NOUVELLE COMMANDE - ${settings.storeName || 'TOP LAPTOP ALGERIE'}*\n` +
+      : `*NOUVELLE COMMANDE - ${siteConfig.storeName}*\n` +
         `--------------------------------\n` +
         `*Référence :* ${order.id}\n` +
         `*Client :* ${order.customerName}\n` +
@@ -61,7 +63,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({ 
         `*Total à régler :* ${formatPrice(order.totalDZD)}\n` +
         `*Paiement :* ${order.paymentMethod === 'cod' ? 'Cash à la livraison (COD)' : 'Confirmation WhatsApp'}`;
 
-    window.open(buildWhatsAppUrl(settings.whatsappNumber || settings.contactPhone, message), '_blank');
+    window.open(buildWhatsAppUrl(siteConfig.whatsappNumber, message), '_blank');
   };
 
   const handlePrint = () => {

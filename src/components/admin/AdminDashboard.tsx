@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { Product } from '../../types';
+import { CommercialDocType, CustomerRecord, Product } from '../../types';
 import { persistStoreBatch } from '../../services/storage';
 import { AnalyticsView } from './AnalyticsView';
 import { OrdersManager } from './OrdersManager';
+import { CustomersManagerView } from './CustomersManagerView';
+import { DocumentsManagerView } from './documents/DocumentsManagerView';
 import { DeliveryCompaniesManager } from './DeliveryCompaniesManager';
 import { ThemesManagerView } from './ThemesManagerView';
 import { EmployeesManagerView } from './EmployeesManagerView';
@@ -16,6 +18,7 @@ import {
   LayoutDashboard, 
   Package, 
   ShoppingCart, 
+  FileText,
   Truck, 
   Palette, 
   Users, 
@@ -30,7 +33,14 @@ import {
   ArrowLeft,
   CloudCheck,
   RefreshCw,
-  Languages
+  Languages,
+  ChevronDown,
+  ChevronRight,
+  Menu,
+  X,
+  Receipt,
+  Wallet,
+  Building2
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -49,14 +59,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
     currentEmployee,
     logoutEmployee,
     deleteProduct,
+    commercialDocuments,
+    documentSettings,
+    customers,
     hasPermission,
     refreshFromCloud,
   } = useStore();
   const { t, language, toggleLanguage } = useLanguage();
   
-  const [activeTab, setActiveTab] = useState<
-    'products' | 'orders' | 'analytics' | 'inventory' | 'delivery' | 'themes' | 'employees' | 'backups' | 'settings'
-  >('products');
+  type AdminTabId =
+    | 'products'
+    | 'orders'
+    | 'customers'
+    | 'documents'
+    | 'analytics'
+    | 'inventory'
+    | 'delivery'
+    | 'themes'
+    | 'employees'
+    | 'backups'
+    | 'settings';
+
+  const canAccessDocuments =
+    currentEmployee?.role === 'SUPER_ADMIN' ||
+    hasPermission('view_documents') ||
+    hasPermission('issue_bl') ||
+    hasPermission('issue_proforma') ||
+    hasPermission('issue_facture') ||
+    hasPermission('issue_receipt');
+
+  const [activeTab, setActiveTab] = useState<AdminTabId>(() => {
+    if (currentEmployee?.role === 'SUPER_ADMIN' || hasPermission('manage_products')) return 'products';
+    if (hasPermission('manage_orders')) return 'orders';
+    if (canAccessDocuments) return 'documents';
+    if (hasPermission('view_analytics')) return 'analytics';
+    if (hasPermission('manage_delivery')) return 'delivery';
+    return 'products';
+  });
+
+  const [pendingOrderForDoc, setPendingOrderForDoc] = useState<{
+    orderId: string;
+    type: CommercialDocType;
+  } | null>(null);
+
+  const [pendingCustomerForDoc, setPendingCustomerForDoc] = useState<{
+    customer: CustomerRecord;
+    type: CommercialDocType;
+  } | null>(null);
+
+  const [docSubTab, setDocSubTab] = useState<CommercialDocType | 'settings'>(() => {
+    if (currentEmployee?.role === 'SUPER_ADMIN' || hasPermission('issue_bl')) return 'bl';
+    if (hasPermission('issue_proforma')) return 'proforma';
+    if (hasPermission('issue_facture')) return 'facture';
+    if (hasPermission('issue_receipt')) return 'receipt';
+    return 'settings';
+  });
+
+  const [documentsMenuOpen, setDocumentsMenuOpen] = useState<boolean>(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
 
   React.useEffect(() => {
     refreshFromCloud().catch(() => {});
@@ -83,6 +143,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
       employees,
       inventoryMovements,
       settings,
+      commercialDocuments,
+      documentSettings,
     });
     await refreshFromCloud().catch(() => {});
     setIsSyncing(false);
@@ -148,12 +210,229 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
     }
   };
 
+  const docSubItems = [
+    {
+      id: 'bl' as const,
+      label: language === 'ar' ? 'وصل تسليم (BL)' : 'Bon de livraison',
+      icon: Truck,
+      allowed: currentEmployee?.role === 'SUPER_ADMIN' || hasPermission('issue_bl'),
+      count: commercialDocuments.filter((d) => d.type === 'bl').length,
+    },
+    {
+      id: 'proforma' as const,
+      label: language === 'ar' ? 'فاتورة أولية (Proforma)' : 'Facture proforma',
+      icon: FileText,
+      allowed: currentEmployee?.role === 'SUPER_ADMIN' || hasPermission('issue_proforma'),
+      count: commercialDocuments.filter((d) => d.type === 'proforma').length,
+    },
+    {
+      id: 'facture' as const,
+      label: language === 'ar' ? 'الفاتورة الرسمية' : 'Facture',
+      icon: Receipt,
+      allowed: currentEmployee?.role === 'SUPER_ADMIN' || hasPermission('issue_facture'),
+      count: commercialDocuments.filter((d) => d.type === 'facture').length,
+    },
+    {
+      id: 'receipt' as const,
+      label: language === 'ar' ? 'وصل الدفع' : 'Reçu de paiement',
+      icon: Wallet,
+      allowed: currentEmployee?.role === 'SUPER_ADMIN' || hasPermission('issue_receipt'),
+      count: commercialDocuments.filter((d) => d.type === 'receipt').length,
+    },
+    {
+      id: 'settings' as const,
+      label: language === 'ar' ? 'إعدادات المستندات' : 'Paramètres Docs',
+      icon: Settings,
+      allowed: currentEmployee?.role === 'SUPER_ADMIN' || hasPermission('manage_document_settings'),
+      count: null,
+    },
+  ].filter((sub) => sub.allowed);
+
+  const sidebarItems = [
+    {
+      id: 'products' as const,
+      label: language === 'ar' ? `المنتجات (${products.length})` : `Catalogue (${products.length})`,
+      icon: Package,
+      perm: 'manage_products' as const
+    },
+    {
+      id: 'orders' as const,
+      label:
+        language === 'ar'
+          ? `الطلبيات (${orders.length})${newOrdersCount > 0 ? ` • ${newOrdersCount} جديد` : ''}`
+          : `Commandes (${orders.length})${newOrdersCount > 0 ? ` • ${newOrdersCount} nouv.` : ''}`,
+      icon: ShoppingCart,
+      perm: 'manage_orders' as const
+    },
+    {
+      id: 'customers' as const,
+      label:
+        language === 'ar'
+          ? `قاعدة بيانات الزبائن (${customers.length})`
+          : `Clients B2B (${customers.length})`,
+      icon: Building2,
+      perm: 'manage_customers' as const
+    },
+    {
+      id: 'documents' as const,
+      label:
+        language === 'ar'
+          ? `المستندات (${commercialDocuments.length})`
+          : `Documents (${commercialDocuments.length})`,
+      icon: FileText,
+      perm: 'view_documents' as const
+    },
+    {
+      id: 'analytics' as const,
+      label: language === 'ar' ? 'الإحصائيات والأرباح' : 'Analyses & Ventes',
+      icon: LayoutDashboard,
+      perm: 'view_analytics' as const
+    },
+    {
+      id: 'inventory' as const,
+      label: language === 'ar' ? 'المخزون والباركود' : 'Stocks & Codes-barres',
+      icon: Boxes,
+      perm: 'manage_inventory' as const
+    },
+    {
+      id: 'delivery' as const,
+      label: language === 'ar' ? 'التوصيل (69 ولاية)' : 'Livraisons (69 Wilayas)',
+      icon: Truck,
+      perm: 'manage_delivery' as const
+    },
+    {
+      id: 'settings' as const,
+      label: language === 'ar' ? 'إعدادات المتجر' : 'Paramètres',
+      icon: Settings,
+      perm: 'manage_settings' as const
+    },
+    {
+      id: 'themes' as const,
+      label: language === 'ar' ? 'المظهر والألوان' : 'Thèmes Visuels',
+      icon: Palette,
+      perm: 'manage_settings' as const
+    },
+    {
+      id: 'employees' as const,
+      label: language === 'ar' ? 'الموظفون والسجل' : 'Employés & Audit',
+      icon: Users,
+      perm: 'manage_employees' as const
+    },
+    {
+      id: 'backups' as const,
+      label: language === 'ar' ? 'النسخ الاحتياطي' : 'Sauvegardes BD',
+      icon: Database,
+      perm: 'manage_backups' as const
+    }
+  ];
+
+  const renderSidebarNav = () => (
+    <nav className="p-3 space-y-1">
+      {sidebarItems.map((tab) => {
+        const Icon = tab.icon;
+        const isAccessible =
+          tab.id === 'documents'
+            ? canAccessDocuments
+            : hasPermission(tab.perm) || currentEmployee?.role === 'SUPER_ADMIN';
+        const isActive = activeTab === tab.id;
+        const isDocuments = tab.id === 'documents';
+
+        return (
+          <div key={tab.id} className="space-y-1">
+            <button
+              type="button"
+              disabled={!isAccessible}
+              onClick={() => {
+                if (isDocuments) {
+                  if (activeTab === 'documents') {
+                    setDocumentsMenuOpen((o) => !o);
+                  } else {
+                    setActiveTab('documents');
+                    setDocumentsMenuOpen(true);
+                  }
+                } else {
+                  setActiveTab(tab.id);
+                  setMobileSidebarOpen(false);
+                }
+              }}
+              className={`w-full px-3 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                isActive
+                  ? 'bg-gradient-to-r from-blue-600/30 to-cyan-600/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(0,212,255,0.15)]'
+                  : isAccessible
+                  ? 'text-slate-400 hover:text-white hover:bg-blue-950/50 border border-transparent'
+                  : 'text-slate-600 opacity-40 cursor-not-allowed border border-transparent'
+              }`}
+            >
+              <span className="flex items-center gap-2.5 min-w-0">
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">{tab.label}</span>
+              </span>
+              {isDocuments && isAccessible && (
+                documentsMenuOpen ? (
+                  <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-cyan-400" />
+                ) : (
+                  <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 ${language === 'ar' ? 'rotate-180' : ''}`} />
+                )
+              )}
+            </button>
+
+            {/* Sub-menu for Documents */}
+            {isDocuments && isAccessible && documentsMenuOpen && docSubItems.length > 0 && (
+              <div className="ms-3 ps-2.5 border-s border-blue-900/50 space-y-0.5 py-0.5">
+                {docSubItems.map((sub) => {
+                  const SubIcon = sub.icon;
+                  const subActive = activeTab === 'documents' && docSubTab === sub.id;
+                  return (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('documents');
+                        setDocSubTab(sub.id);
+                        setMobileSidebarOpen(false);
+                      }}
+                      className={`w-full px-2.5 py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-between gap-1.5 transition-all cursor-pointer ${
+                        subActive
+                          ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold'
+                          : 'text-slate-400 hover:text-white hover:bg-blue-950/40 border border-transparent'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <SubIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="truncate">{sub.label}</span>
+                      </span>
+                      {sub.count !== null && (
+                        <span className="text-[10px] font-mono px-1.5 rounded bg-[#050A14] text-slate-400">
+                          {sub.count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+
   return (
     <div className="min-h-screen bg-[#050505] text-slate-100 flex flex-col">
       {/* Top Header */}
       <header className="bg-[#080F1C] border-b border-blue-900/40 sticky top-0 z-30 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
+        <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Mobile Sidebar Toggle */}
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen((v) => !v)}
+              className="lg:hidden p-2 rounded-xl bg-blue-950/60 text-cyan-300 hover:text-white border border-blue-900/40 cursor-pointer"
+              aria-label="Menu Admin"
+            >
+              {mobileSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
+
             <button
               onClick={onBackToStore}
               className="p-2 rounded-xl bg-blue-950/60 text-slate-300 hover:text-white border border-blue-900/40 flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
@@ -226,95 +505,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
             </button>
           </div>
         </div>
-
-        {/* Navigation Tabs Bar */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-1 overflow-x-auto border-t border-blue-950/60 pt-1 no-scrollbar">
-          {[
-            {
-              id: 'products',
-              label: language === 'ar' ? `المنتجات (${products.length})` : `Catalogue (${products.length})`,
-              icon: Package,
-              perm: 'manage_products' as const
-            },
-            {
-              id: 'orders',
-              label:
-                language === 'ar'
-                  ? `الطلبيات (${orders.length})${newOrdersCount > 0 ? ` • ${newOrdersCount} جديد` : ''}`
-                  : `Commandes (${orders.length})${newOrdersCount > 0 ? ` • ${newOrdersCount} nouv.` : ''}`,
-              icon: ShoppingCart,
-              perm: 'manage_orders' as const
-            },
-            {
-              id: 'analytics',
-              label: language === 'ar' ? 'الإحصائيات والأرباح' : 'Analyses & Ventes',
-              icon: LayoutDashboard,
-              perm: 'view_analytics' as const
-            },
-            {
-              id: 'inventory',
-              label: language === 'ar' ? 'المخزون والباركود' : 'Stocks & Codes-barres',
-              icon: Boxes,
-              perm: 'manage_inventory' as const
-            },
-            {
-              id: 'delivery',
-              label: language === 'ar' ? 'التوصيل (69 ولاية)' : 'Livraisons (69 Wilayas)',
-              icon: Truck,
-              perm: 'manage_delivery' as const
-            },
-            {
-              id: 'settings',
-              label: language === 'ar' ? 'إعدادات المتجر' : 'Paramètres',
-              icon: Settings,
-              perm: 'manage_settings' as const
-            },
-            {
-              id: 'themes',
-              label: language === 'ar' ? 'المظهر والألوان' : 'Thèmes Visuels',
-              icon: Palette,
-              perm: 'manage_settings' as const
-            },
-            {
-              id: 'employees',
-              label: language === 'ar' ? 'الموظفون والسجل' : 'Employés & Audit',
-              icon: Users,
-              perm: 'manage_employees' as const
-            },
-            {
-              id: 'backups',
-              label: language === 'ar' ? 'النسخ الاحتياطي' : 'Sauvegardes BD',
-              icon: Database,
-              perm: 'manage_backups' as const
-            }
-          ].map(tab => {
-            const Icon = tab.icon;
-            const isAccessible = hasPermission(tab.perm) || currentEmployee?.role === 'SUPER_ADMIN';
-            const isActive = activeTab === tab.id;
-
-            return (
-              <button
-                key={tab.id}
-                disabled={!isAccessible}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3 py-2 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
-                  isActive
-                    ? 'border-cyan-400 text-cyan-400 bg-blue-950/40'
-                    : isAccessible
-                    ? 'border-transparent text-slate-400 hover:text-slate-200'
-                    : 'border-transparent text-slate-600 opacity-40 cursor-not-allowed'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+      {/* Dashboard Shell: Responsive Left/Right Sidebar + Main Content */}
+      <div className="flex-1 flex relative">
+        {/* Desktop Persistent Sidebar */}
+        <aside className="hidden lg:flex lg:flex-col w-64 flex-shrink-0 bg-[#080F1C] border-e border-blue-900/40 sticky top-[57px] h-[calc(100vh-57px)] overflow-y-auto">
+          <div className="px-4 pt-4 pb-2 text-[10px] font-mono uppercase tracking-widest text-slate-500 font-bold">
+            {language === 'ar' ? 'القائمة الإدارية' : 'Navigation Admin'}
+          </div>
+          {renderSidebarNav()}
+        </aside>
+
+        {/* Mobile Drawer Sidebar */}
+        {mobileSidebarOpen && (
+          <div
+            onClick={() => setMobileSidebarOpen(false)}
+            className="lg:hidden fixed inset-0 z-40 bg-black/75 backdrop-blur-xs flex"
+          >
+            <aside
+              onClick={(e) => e.stopPropagation()}
+              className="w-72 max-w-[82vw] h-full bg-[#080F1C] border-e border-blue-900/50 overflow-y-auto shadow-2xl"
+            >
+              <div className="p-4 border-b border-blue-900/40 flex items-center justify-between">
+                <span className="font-mono font-black text-sm text-white">
+                  TOP LAPTOP <span className="text-cyan-400">MENU</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMobileSidebarOpen(false)}
+                  className="p-1.5 rounded-lg bg-blue-950/60 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {renderSidebarNav()}
+            </aside>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <main className="flex-1 min-w-0 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {activeTab === 'analytics' && <AnalyticsView />}
 
         {activeTab === 'products' && (
@@ -444,13 +675,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
         )}
 
         {activeTab === 'inventory' && <InventoryBarcodeView />}
-        {activeTab === 'orders' && <OrdersManager />}
+        {activeTab === 'orders' && (
+          <OrdersManager
+            onCreateCommercialDoc={(orderId, type) => {
+              setPendingCustomerForDoc(null);
+              setPendingOrderForDoc({ orderId, type });
+              setDocSubTab(type);
+              setDocumentsMenuOpen(true);
+              setActiveTab('documents');
+            }}
+          />
+        )}
+        {activeTab === 'customers' && (
+          <CustomersManagerView
+            onCreateDocForCustomer={(customer, type) => {
+              setPendingOrderForDoc(null);
+              setPendingCustomerForDoc({ customer, type });
+              setDocSubTab(type);
+              setDocumentsMenuOpen(true);
+              setActiveTab('documents');
+            }}
+          />
+        )}
+        {activeTab === 'documents' && (
+          <DocumentsManagerView
+            initialOrderForDoc={pendingOrderForDoc}
+            onClearInitialOrder={() => setPendingOrderForDoc(null)}
+            initialCustomerForDoc={pendingCustomerForDoc}
+            onClearInitialCustomer={() => setPendingCustomerForDoc(null)}
+            controlledSubTab={docSubTab}
+            onSubTabChange={setDocSubTab}
+          />
+        )}
         {activeTab === 'delivery' && <DeliveryCompaniesManager />}
         {activeTab === 'themes' && <ThemesManagerView />}
         {activeTab === 'employees' && <EmployeesManagerView />}
         {activeTab === 'backups' && <BackupRecoveryView />}
         {activeTab === 'settings' && <StoreSettingsView />}
-      </main>
+        </main>
+      </div>
 
       {/* Product Form Modal (Add / Edit) */}
       <ProductFormModal

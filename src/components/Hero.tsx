@@ -3,6 +3,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useStore } from '../context/StoreContext';
 import { Product } from '../types';
 import { buildWhatsAppUrl } from '../utils/contactLinks';
+import { getEffectiveSiteConfig } from '../config/siteConfig';
 import { trackContact } from '../utils/metaPixel';
 import { 
   Cpu, 
@@ -60,11 +61,12 @@ export const Hero: React.FC<HeroProps> = ({
   const featured = featuredProducts[activeIndex] || products[0];
 
   const handleWhatsAppClick = () => {
+    const siteConfig = getEffectiveSiteConfig(settings);
     trackContact('whatsapp', 'Hero WhatsApp Button');
     const message = language === 'ar'
-      ? `السلام عليكم، أرغب في الاستفسار عن الأجهزة المتوفرة في ${settings.storeName || 'TOP LAPTOP'}.`
-      : `Bonjour ${settings.storeName || 'TOP LAPTOP'}, je souhaite me renseigner sur les ordinateurs portables disponibles.`;
-    window.open(buildWhatsAppUrl(settings.whatsappNumber || settings.contactPhone, message), '_blank');
+      ? `السلام عليكم، أرغب في الاستفسار عن الأجهزة المتوفرة في ${siteConfig.storeName}.`
+      : `Bonjour ${siteConfig.storeName}, je souhaite me renseigner sur les ordinateurs portables disponibles.`;
+    window.open(buildWhatsAppUrl(siteConfig.whatsappNumber, message), '_blank');
   };
 
   return (

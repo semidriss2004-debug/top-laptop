@@ -46,3 +46,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Local customers database (private customer data)
+data/

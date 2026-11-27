@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Order, OrderStatus } from '../../types';
+import { CommercialDocType, Order, OrderStatus } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { BonDeLivraisonModal } from '../documents/BonDeLivraisonModal';
@@ -20,7 +20,11 @@ import {
   RefreshCw
 } from 'lucide-react';
 
-export const OrdersManager: React.FC = () => {
+interface OrdersManagerProps {
+  onCreateCommercialDoc?: (orderId: string, type: CommercialDocType) => void;
+}
+
+export const OrdersManager: React.FC<OrdersManagerProps> = ({ onCreateCommercialDoc }) => {
   const { orders, updateOrderStatus, hasPermission, refreshFromCloud } = useStore();
   const { t, language } = useLanguage();
 
@@ -230,6 +234,32 @@ export const OrdersManager: React.FC = () => {
                       <FileText className="w-3.5 h-3.5" />
                       <span>Bon de Livraison</span>
                     </button>
+
+                    {/* Commercial Documents Quick Selector */}
+                    {onCreateCommercialDoc &&
+                      (hasPermission('issue_proforma') ||
+                        hasPermission('issue_facture') ||
+                        hasPermission('issue_bl') ||
+                        hasPermission('issue_receipt')) && (
+                        <select
+                          defaultValue=""
+                          onChange={(e) => {
+                            const val = e.target.value as CommercialDocType | '';
+                            if (val) {
+                              onCreateCommercialDoc(order.id, val);
+                              e.target.value = '';
+                            }
+                          }}
+                          className="text-xs font-bold rounded-lg px-2 py-1.5 bg-[#050A14] text-emerald-300 border border-emerald-500/40 cursor-pointer"
+                          title="Créer un document commercial lié à cette commande"
+                        >
+                          <option value="">+ Document...</option>
+                          {hasPermission('issue_proforma') && <option value="proforma">→ Proforma</option>}
+                          {hasPermission('issue_facture') && <option value="facture">→ Facture</option>}
+                          {hasPermission('issue_bl') && <option value="bl">→ BL Commercial</option>}
+                          {hasPermission('issue_receipt') && <option value="receipt">→ Reçu paiement</option>}
+                        </select>
+                      )}
 
                     {/* WhatsApp Contact */}
                     <button

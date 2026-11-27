@@ -12,6 +12,7 @@ import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { OrderConfirmationModal } from './components/OrderConfirmationModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
+import { ContactModal } from './components/ContactModal';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { Footer } from './components/Footer';
@@ -66,6 +67,7 @@ const StorefrontContent: React.FC = () => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
+  const [isContactOpen, setIsContactOpen] = useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [isAdminViewOpen, setIsAdminViewOpen] = useState(false);
 
@@ -298,6 +300,7 @@ const StorefrontContent: React.FC = () => {
       <Header
         onOpenAdmin={handleAdminClick}
         onOpenTracking={() => setIsTrackingOpen(true)}
+        onOpenContact={() => setIsContactOpen(true)}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         selectedCategory={selectedCategory}
@@ -557,6 +560,12 @@ const StorefrontContent: React.FC = () => {
         onClose={() => setIsTrackingOpen(false)}
       />
 
+      {/* Contact Us Modal */}
+      <ContactModal
+        isOpen={isContactOpen}
+        onClose={() => setIsContactOpen(false)}
+      />
+
       {/* Admin Login Gateway Modal */}
       <AdminLoginModal
         isOpen={isAdminLoginOpen}
@@ -571,6 +580,7 @@ const StorefrontContent: React.FC = () => {
       <Footer
         onOpenAdmin={handleAdminClick}
         onOpenTracking={() => setIsTrackingOpen(true)}
+        onOpenContact={() => setIsContactOpen(true)}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat);
           scrollToCatalog();

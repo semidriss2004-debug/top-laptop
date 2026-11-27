@@ -1,4 +1,5 @@
 import { Product } from '../types';
+import { DEFAULT_SITE_CONFIG } from '../config/siteConfig';
 
 export const INITIAL_PRODUCTS: Product[] = [
   // ====================================================
@@ -412,21 +413,21 @@ export const INITIAL_PRODUCTS: Product[] = [
 ];
 
 export const INITIAL_SETTINGS = {
-  storeName: 'TOP LAPTOP ALGERIE',
+  storeName: DEFAULT_SITE_CONFIG.storeName,
   flatDeliveryFeeDZD: 800,
-  whatsappNumber: '0557526420',
-  contactPhone: '0557526420',
-  contactEmail: 'contact@toplaptop-dz.com',
-  storeAddress: '15 Rue Didouche Mourad, Alger Centre, Alger, Algérie',
+  whatsappNumber: DEFAULT_SITE_CONFIG.whatsappNumber,
+  contactPhone: DEFAULT_SITE_CONFIG.phone,
+  contactEmail: DEFAULT_SITE_CONFIG.email,
+  storeAddress: DEFAULT_SITE_CONFIG.address,
   taxNumberNIF: '001916012345678',
   tradeRegisterRC: '16/00-9876543B20',
   socialLinks: {
-    facebook: 'https://facebook.com/toplaptop.dz',
-    instagram: 'https://instagram.com/toplaptop.dz',
-    tiktok: 'https://tiktok.com/@toplaptop.dz',
-    youtube: 'https://youtube.com/@toplaptopdz',
-    linkedin: 'https://linkedin.com/company/top-laptop-dz',
-    whatsapp: 'https://wa.me/213557526420'
+    facebook: DEFAULT_SITE_CONFIG.facebook,
+    instagram: DEFAULT_SITE_CONFIG.instagram,
+    tiktok: DEFAULT_SITE_CONFIG.tiktok,
+    youtube: DEFAULT_SITE_CONFIG.youtube,
+    linkedin: DEFAULT_SITE_CONFIG.linkedin,
+    whatsapp: DEFAULT_SITE_CONFIG.whatsappUrl
   },
   themeSettings: {
     activeThemeId: 'cyber-neon' as const,
@@ -463,7 +464,15 @@ export const INITIAL_EMPLOYEES = [
       'view_analytics' as const,
       'manage_inventory' as const,
       'manage_backups' as const,
-      'manage_settings' as const
+      'manage_settings' as const,
+      'view_documents' as const,
+      'issue_bl' as const,
+      'issue_proforma' as const,
+      'issue_facture' as const,
+      'issue_receipt' as const,
+      'cancel_documents' as const,
+      'manage_document_settings' as const,
+      'manage_customers' as const
     ],
     createdAt: new Date().toISOString(),
     lastLoginAt: new Date().toISOString()
@@ -478,7 +487,14 @@ export const INITIAL_EMPLOYEES = [
     customPermissions: [
       'view_costs_profits' as const,
       'view_analytics' as const,
-      'manage_orders' as const
+      'manage_orders' as const,
+      'view_documents' as const,
+      'issue_proforma' as const,
+      'issue_facture' as const,
+      'issue_receipt' as const,
+      'cancel_documents' as const,
+      'manage_document_settings' as const,
+      'manage_customers' as const
     ],
     createdAt: new Date().toISOString()
   },
@@ -491,7 +507,22 @@ export const INITIAL_EMPLOYEES = [
     passcode: 'delivery2026',
     customPermissions: [
       'manage_delivery' as const,
-      'manage_orders' as const
+      'manage_orders' as const,
+      'view_documents' as const,
+      'issue_bl' as const
+    ],
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'emp-cashier',
+    name: 'Nabil Haddad (Caissier)',
+    email: 'caisse@toplaptop.dz',
+    role: 'CASHIER' as const,
+    isActive: true,
+    passcode: 'cashier2026',
+    customPermissions: [
+      'view_documents' as const,
+      'issue_receipt' as const
     ],
     createdAt: new Date().toISOString()
   },
@@ -503,7 +534,10 @@ export const INITIAL_EMPLOYEES = [
     isActive: true,
     passcode: 'sales2026',
     customPermissions: [
-      'manage_orders' as const
+      'manage_orders' as const,
+      'view_documents' as const,
+      'issue_proforma' as const,
+      'issue_bl' as const
     ],
     createdAt: new Date().toISOString()
   }

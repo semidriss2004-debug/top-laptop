@@ -12,7 +12,85 @@ const ALLOWED_KEYS = [
   "inventoryMovements",
   "activityLogs",
   "themeSettings",
+  "commercialDocuments",
+  "documentSettings",
+  "customers",
 ] as const;
+
+const DOC_TYPES = ["bl", "proforma", "facture", "receipt"] as const;
+
+interface DocumentLike {
+  id: string;
+  type: string;
+  number: string;
+  date: string;
+  status: string;
+  customer?: { name?: string; phone?: string };
+  lines?: Array<{ productName?: string; quantity?: number; unitPriceDZD?: number; discountDZD?: number }>;
+  totalDZD?: number;
+  paymentAmountDZD?: number;
+  paymentMethod?: string;
+  linkedFactureId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+function validateCommercialDocumentsServer(
+  incomingRaw: unknown,
+  existingRaw?: unknown
+): { ok: true; docs: DocumentLike[] } | { ok: false; error: string } {
+  if (!Array.isArray(incomingRaw)) {
+    return { ok: false, error: "commercialDocuments must be an array" };
+  }
+
+  const docs = incomingRaw as DocumentLike[];
+  const existing = Array.isArray(existingRaw) ? (existingRaw as DocumentLike[]) : [];
+  const existingMap = new Map(existing.map((d) => [d.id, d]));
+  const seenNumbers = new Set<string>();
+
+  for (const doc of docs) {
+    if (!doc || typeof doc !== "object" || typeof doc.id !== "string" || !doc.id.trim()) {
+      return { ok: false, error: "Invalid document ID" };
+    }
+    if (!DOC_TYPES.includes(doc.type as (typeof DOC_TYPES)[number])) {
+      return { ok: false, error: `Invalid document type: ${String(doc.type)}` };
+    }
+    if (typeof doc.number !== "string" || !doc.number.trim()) {
+      return { ok: false, error: "Document number is required" };
+    }
+    const upperNum = doc.number.trim().toUpperCase();
+    if (seenNumbers.has(upperNum)) {
+      return { ok: false, error: `Duplicate document number rejected: ${doc.number}` };
+    }
+    seenNumbers.add(upperNum);
+
+    if (!doc.customer || typeof doc.customer.name !== "string" || !doc.customer.name.trim()) {
+      return { ok: false, error: `Customer name missing on ${doc.number}` };
+    }
+    if (typeof doc.totalDZD !== "number" || !Number.isFinite(doc.totalDZD) || doc.totalDZD < 0) {
+      return { ok: false, error: `Invalid totalDZD on ${doc.number}` };
+    }
+
+    // Enforce immutability of already-issued documents (only cancellation, BL delivery status, or Facture payment reconciliation allowed)
+    const prev = existingMap.get(doc.id);
+    if (prev && prev.status !== "draft") {
+      if (doc.status === "draft") {
+        return { ok: false, error: `Issued document ${prev.number} cannot revert to draft` };
+      }
+      if (doc.status !== "cancelled") {
+        const linesChanged = JSON.stringify(prev.lines) !== JSON.stringify(doc.lines);
+        const totalChanged = prev.totalDZD !== doc.totalDZD;
+        const customerChanged = JSON.stringify(prev.customer) !== JSON.stringify(doc.customer);
+        if (linesChanged || totalChanged || customerChanged) {
+          return { ok: false, error: `Issued document ${prev.number} cannot be edited. Cancel and re-issue instead.` };
+        }
+      }
+    }
+  }
+
+  return { ok: true, docs };
+}
 
 type AllowedKey = (typeof ALLOWED_KEYS)[number];
 
@@ -178,6 +256,29 @@ export default async (req: Request, _context: Context) => {
           valueToStore = mergeOrdersLists(existingOrders, body.value);
         }
 
+        // Server-side validation for commercial documents
+        if (body.key === "commercialDocuments") {
+          const existingEnvelope = (await store.get("commercialDocuments", {
+            type: "json",
+            consistency: "strong",
+          })) as TimestampedEnvelope | unknown;
+          const existingDocs =
+            existingEnvelope &&
+            typeof existingEnvelope === "object" &&
+            "value" in (existingEnvelope as Record<string, unknown>)
+              ? (existingEnvelope as TimestampedEnvelope).value
+              : existingEnvelope;
+
+          const validation = validateCommercialDocumentsServer(body.value, existingDocs);
+          if (!validation.ok) {
+            return new Response(
+              JSON.stringify({ ok: false, error: validation.error }),
+              { status: 400, headers }
+            );
+          }
+          valueToStore = validation.docs;
+        }
+
         const envelope: TimestampedEnvelope = {
           updatedAt,
           value: valueToStore,
@@ -222,6 +323,26 @@ export default async (req: Request, _context: Context) => {
                 updatedAt: Math.max(envelope.updatedAt || now, now),
                 value: mergeOrdersLists(existingOrders, envelope.value),
               };
+            }
+
+            if (k === "commercialDocuments") {
+              const existingEnvelope = (await store.get("commercialDocuments", {
+                type: "json",
+                consistency: "strong",
+              })) as TimestampedEnvelope | unknown;
+              const existingDocs =
+                existingEnvelope &&
+                typeof existingEnvelope === "object" &&
+                "value" in (existingEnvelope as Record<string, unknown>)
+                  ? (existingEnvelope as TimestampedEnvelope).value
+                  : existingEnvelope;
+              const validation = validateCommercialDocumentsServer(envelope.value, existingDocs);
+              if (!validation.ok) {
+                return new Response(
+                  JSON.stringify({ ok: false, error: validation.error }),
+                  { status: 400, headers }
+                );
+              }
             }
 
             updates.push(store.setJSON(k, envelope));

@@ -1,9 +1,11 @@
 import React from 'react';
 import { buildWhatsAppUrl, normalizeExternalUrl } from '../utils/contactLinks';
 import { trackContact } from '../utils/metaPixel';
+import { useStore } from '../context/StoreContext';
+import { getEffectiveSiteConfig } from '../config/siteConfig';
 
 interface SocialIconsProps {
-  socialLinks: {
+  socialLinks?: {
     facebook?: string;
     instagram?: string;
     tiktok?: string;
@@ -20,6 +22,16 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
   size = 'md',
   className = ''
 }) => {
+  const { settings } = useStore();
+  const siteConfig = getEffectiveSiteConfig(settings);
+  const resolvedLinks = socialLinks || {
+    facebook: siteConfig.facebook,
+    instagram: siteConfig.instagram,
+    tiktok: siteConfig.tiktok,
+    youtube: siteConfig.youtube,
+    linkedin: siteConfig.linkedin,
+    whatsapp: siteConfig.whatsappUrl,
+  };
   const sizeClasses = {
     sm: 'w-7 h-7 p-1.5',
     md: 'w-9 h-9 p-2',
@@ -35,7 +47,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
   const items = [
     {
       key: 'facebook',
-      url: normalizeExternalUrl(socialLinks.facebook),
+      url: normalizeExternalUrl(resolvedLinks.facebook),
       title: 'Facebook',
       bgHover: 'hover:bg-[#1877F2] hover:border-[#1877F2]',
       color: 'text-[#1877F2] group-hover:text-white',
@@ -47,7 +59,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
     },
     {
       key: 'instagram',
-      url: normalizeExternalUrl(socialLinks.instagram),
+      url: normalizeExternalUrl(resolvedLinks.instagram),
       title: 'Instagram',
       bgHover: 'hover:bg-gradient-to-tr hover:from-[#F58529] hover:via-[#DD2A7B] hover:to-[#8134AF] hover:border-pink-500',
       color: 'text-[#E4405F] group-hover:text-white',
@@ -59,7 +71,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
     },
     {
       key: 'tiktok',
-      url: normalizeExternalUrl(socialLinks.tiktok),
+      url: normalizeExternalUrl(resolvedLinks.tiktok),
       title: 'TikTok',
       bgHover: 'hover:bg-black hover:border-slate-400',
       color: 'text-slate-200 group-hover:text-white',
@@ -71,7 +83,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
     },
     {
       key: 'youtube',
-      url: normalizeExternalUrl(socialLinks.youtube),
+      url: normalizeExternalUrl(resolvedLinks.youtube),
       title: 'YouTube',
       bgHover: 'hover:bg-[#FF0000] hover:border-[#FF0000]',
       color: 'text-[#FF0000] group-hover:text-white',
@@ -83,7 +95,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
     },
     {
       key: 'linkedin',
-      url: normalizeExternalUrl(socialLinks.linkedin),
+      url: normalizeExternalUrl(resolvedLinks.linkedin),
       title: 'LinkedIn',
       bgHover: 'hover:bg-[#0A66C2] hover:border-[#0A66C2]',
       color: 'text-[#0A66C2] group-hover:text-white',
@@ -95,7 +107,7 @@ export const SocialIcons: React.FC<SocialIconsProps> = ({
     },
     {
       key: 'whatsapp',
-      url: socialLinks.whatsapp && socialLinks.whatsapp.trim() ? buildWhatsAppUrl(socialLinks.whatsapp) : undefined,
+      url: resolvedLinks.whatsapp && resolvedLinks.whatsapp.trim() ? buildWhatsAppUrl(resolvedLinks.whatsapp) : undefined,
       title: 'WhatsApp',
       bgHover: 'hover:bg-[#25D366] hover:border-[#25D366]',
       color: 'text-[#25D366] group-hover:text-white',

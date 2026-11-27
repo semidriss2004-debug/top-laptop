@@ -4,7 +4,8 @@ import { SocialIcons } from './SocialIcons';
 import { useLanguage } from '../context/LanguageContext';
 import { useStore } from '../context/StoreContext';
 import { useTheme } from '../context/ThemeContext';
-import { buildTelUrl, buildWhatsAppUrl } from '../utils/contactLinks';
+import { buildTelUrl } from '../utils/contactLinks';
+import { getEffectiveSiteConfig } from '../config/siteConfig';
 import { trackContact } from '../utils/metaPixel';
 import { 
   Phone, 
@@ -18,17 +19,20 @@ import {
 interface FooterProps {
   onOpenAdmin: () => void;
   onOpenTracking: () => void;
+  onOpenContact?: () => void;
   onSelectCategory: (cat: string) => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({ 
   onOpenAdmin, 
   onOpenTracking, 
+  onOpenContact,
   onSelectCategory 
 }) => {
   const { t, language } = useLanguage();
   const { settings } = useStore();
   const { activeTheme } = useTheme();
+  const siteConfig = getEffectiveSiteConfig(settings);
 
   return (
     <footer className="bg-[#050A14] border-t border-blue-900/40 text-slate-400 text-xs">
@@ -49,8 +53,12 @@ export const Footer: React.FC<FooterProps> = ({
               </span>
               <SocialIcons
                 socialLinks={{
-                  ...settings.socialLinks,
-                  whatsapp: settings.whatsappNumber || settings.socialLinks?.whatsapp,
+                  facebook: siteConfig.facebook,
+                  instagram: siteConfig.instagram,
+                  tiktok: siteConfig.tiktok,
+                  youtube: siteConfig.youtube,
+                  linkedin: siteConfig.linkedin,
+                  whatsapp: siteConfig.whatsappUrl,
                 }}
                 size="md"
               />
@@ -112,6 +120,17 @@ export const Footer: React.FC<FooterProps> = ({
                   <span>{language === 'ar' ? 'تتبع طلبيتي مباشرة' : 'Suivre ma commande en direct'}</span>
                 </button>
               </li>
+              {onOpenContact && (
+                <li>
+                  <button
+                    onClick={onOpenContact}
+                    className="hover:text-cyan-300 transition-colors text-emerald-400 font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'اتصل بنا' : 'Contactez-nous'}</span>
+                  </button>
+                </li>
+              )}
               <li>
                 <button
                   onClick={onOpenAdmin}
@@ -132,39 +151,39 @@ export const Footer: React.FC<FooterProps> = ({
             <div className="space-y-2.5">
               <div className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
-                <span>{settings.storeAddress}</span>
+                <span>{siteConfig.address}</span>
               </div>
               <div className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-blue-400 flex-shrink-0" />
                 <a
-                  href={buildTelUrl(settings.contactPhone || settings.whatsappNumber)}
-                  onClick={() => trackContact('phone', settings.contactPhone || settings.whatsappNumber)}
+                  href={buildTelUrl(siteConfig.phone)}
+                  onClick={() => trackContact('phone', siteConfig.phone)}
                   className="font-mono hover:text-cyan-300 transition-colors"
                   dir="ltr"
                 >
-                  {settings.contactPhone || settings.whatsappNumber}
+                  {siteConfig.phone}
                 </a>
               </div>
               <div className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-indigo-400 flex-shrink-0" />
                 <a
-                  href={`mailto:${settings.contactEmail}`}
-                  onClick={() => trackContact('email', settings.contactEmail)}
+                  href={`mailto:${siteConfig.email}`}
+                  onClick={() => trackContact('email', siteConfig.email)}
                   className="hover:text-cyan-300 transition-colors"
                 >
-                  {settings.contactEmail}
+                  {siteConfig.email}
                 </a>
               </div>
               <div className="flex items-center gap-2.5 text-green-400">
                 <MessageCircle className="w-4 h-4 flex-shrink-0" />
                 <a
-                  href={buildWhatsAppUrl(settings.whatsappNumber || settings.contactPhone)}
-                  onClick={() => trackContact('whatsapp', settings.whatsappNumber || settings.contactPhone)}
+                  href={siteConfig.whatsappUrl}
+                  onClick={() => trackContact('whatsapp', siteConfig.whatsappNumber)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-green-300 transition-colors font-mono"
                 >
-                  WhatsApp: <span dir="ltr">{settings.whatsappNumber || settings.contactPhone}</span>
+                  WhatsApp: <span dir="ltr">{siteConfig.whatsappNumber}</span>
                 </a>
               </div>
               <div className="flex items-center gap-2.5 text-cyan-300">

@@ -156,6 +156,7 @@ export const BackupRecoveryView: React.FC = () => {
                   </div>
                   <div className="text-[11px] text-slate-400">
                     {b.summary.productsCount} Produits • {b.summary.ordersCount} Commandes • {b.summary.employeesCount} Employés
+                    {typeof b.summary.documentsCount === 'number' ? ` • ${b.summary.documentsCount} Documents` : ''}
                   </div>
                 </div>
 
